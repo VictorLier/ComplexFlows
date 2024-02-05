@@ -51,6 +51,7 @@ class Areas():
         self.P2 = self.a*2+self.c*2
         self.P3 = self.b*2+self.c*2
 
+
     def VolumeDiameter(self):
         """
         Finds equivalent diameter from geometry volume (V)
@@ -78,6 +79,7 @@ def ProjectedareaDiameter(Ap: float):
         '''
         Dpa = math.sqrt(4*Ap/math.pi)
         return Dpa
+
 
 
 if __name__ == '__main__':
