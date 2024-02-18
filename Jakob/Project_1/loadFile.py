@@ -21,9 +21,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import sys
+import scipy
 
 plt.close('all')
-
 
 def plot_xyz(x, y, z, ylabels, title):
     # Plotting position
@@ -84,7 +84,7 @@ def get_rotation_matrix_from_rotvec(rotvec):
 
 if __name__ == '__main__':
     # Loading track as pandas dataframe
-    track = pd.read_csv('track00.csv')
+    track = pd.read_csv(r'Jakob\Project_1\track00.csv')
 
     # %%
     # Plotting position
@@ -92,7 +92,11 @@ if __name__ == '__main__':
                'Position y [mm]', 
                'Position z [mm]']
     plot_xyz(track.pos_x, track.pos_y, track.pos_z, ylabels, 'Position of Particle')
-    
+
+    #integrate the position to get the velocity in the z direction the data is sampled at 100 Hz
+    time_z = np.arange(0, len(track)/100, 1/100)
+    vel_z = scipy.trapz(track.pos_z/1000,time_z)
+
     
     # Plotting orientation. The orietation is here defined as the rodriguez rotation vector 
     # needed to be applied to the cube as it appears in the CAD file to end as measured in 
@@ -111,9 +115,10 @@ if __name__ == '__main__':
     ori_z_filtered = savgol_filter(track.ori_z, window_length=10, polyorder=1)
     
     plot_xyz(ori_x_filtered, ori_y_filtered, ori_z_filtered, ylabels, 'Filtered Orientation of Particle')
+
+    plt.show()
     
-    sys.exit('A plot of the position and orientation should have appeared. Once you have '
-             'understood the code feel free to remove this line of code at Line 116')
+    #sys.exit('A plot of the position and orientation should have appeared. Once you have understood the code feel free to remove this line of code at Line 116')
     
     #%% ==================================================================================
     # Now I will show how to interpret this weird rodriguez rotation vector.
@@ -134,7 +139,7 @@ if __name__ == '__main__':
         # Extracting the vectors. MAKE SURE WE CENTER THE SHAPE by subtracting the mean of all points
         vectors = shape_file.vectors - np.mean( shape_file.vectors )
     else:
-        shape_file = np.load('cube5mm.npy')
+        shape_file = np.load(r'Jakob\Project_1\cube5mm.npy')
         vectors = shape_file - np.mean(shape_file)
     
     # %%
@@ -180,10 +185,10 @@ if __name__ == '__main__':
     ax.set_xlim(-track.pos_z.min()/2, track.pos_z.min()/2)
     ax.set_ylim(-track.pos_z.min()/2, track.pos_z.min()/2)
     ax.set_aspect('equal')
-    
+    plt.show()
     # Try to open the window and look at the pattern. Notice the secondary motion.
-    sys.exit('You should now have a plot of the falling cube but without rotation. '
-             'Remove this line of code when you have looked at the plot and want to move on. Line 177')
+    #sys.exit('You should now have a plot of the falling cube but without rotation. '
+    #         'Remove this line of code when you have looked at the plot and want to move on. Line 177')
     # %%
     # 4. In this part I will show how to use the rodriguez vector to the rotate the shape
     # based on the data stored in the columns track.ori_x, track.ori_y, track.ori_z.
@@ -229,9 +234,9 @@ if __name__ == '__main__':
     
     # You should now hopefully see a cube on screen on the left that is not rotated
     # and a cube on the right that is. Yay!!
-    
-    sys.exit('You should now have a plot of a cube not rotated and one that is rotated '
-             'When youre ready to move on delete this line. Line 225')
+    #plt.show()
+    #sys.exit('You should now have a plot of a cube not rotated and one that is rotated '
+    #         'When youre ready to move on delete this line. Line 225')
     
     # %%
     # 5. Now that we know how to rotate and move a cube we can do the exact same loop as 
@@ -273,6 +278,7 @@ if __name__ == '__main__':
     ax.set_ylim(-track.pos_z.min()/2, track.pos_z.min()/2)
     ax.set_aspect('equal')
     
+    plt.show()
     print(' ===== Yay you completed this introductory task to moving and rotating shapes. =====')
     
     
