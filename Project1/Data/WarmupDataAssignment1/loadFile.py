@@ -20,6 +20,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+import os
 import sys
 
 plt.close('all')
@@ -84,9 +85,10 @@ def get_rotation_matrix_from_rotvec(rotvec):
 
 if __name__ == '__main__':
     # Loading track as pandas dataframe
-    track = pd.read_csv('track00.csv')
+    path = os.getcwd()
+    file_path = os.path.join(path, r'Project1\Data\WarmupDataAssignment1\track00.csv')
+    track = pd.read_csv(file_path)
 
-    # %%
     # Plotting position
     ylabels = ['Position x [mm]',
                'Position y [mm]', 
@@ -112,10 +114,8 @@ if __name__ == '__main__':
     
     plot_xyz(ori_x_filtered, ori_y_filtered, ori_z_filtered, ylabels, 'Filtered Orientation of Particle')
     
-    sys.exit('A plot of the position and orientation should have appeared. Once you have '
-             'understood the code feel free to remove this line of code at Line 116')
+    # sys.exit('A plot of the position and orientation should have appeared. Once you have understood the code feel free to remove this line of code at Line 116')
     
-    #%% ==================================================================================
     # Now I will show how to interpret this weird rodriguez rotation vector.
     
     # 1. We load the shape and this gives us a "Mesh" object. The important thing for
@@ -182,8 +182,8 @@ if __name__ == '__main__':
     ax.set_aspect('equal')
     
     # Try to open the window and look at the pattern. Notice the secondary motion.
-    sys.exit('You should now have a plot of the falling cube but without rotation. '
-             'Remove this line of code when you have looked at the plot and want to move on. Line 177')
+    # sys.exit('You should now have a plot of the falling cube but without rotation. '
+    #          'Remove this line of code when you have looked at the plot and want to move on. Line 177')
     # %%
     # 4. In this part I will show how to use the rodriguez vector to the rotate the shape
     # based on the data stored in the columns track.ori_x, track.ori_y, track.ori_z.
@@ -230,8 +230,8 @@ if __name__ == '__main__':
     # You should now hopefully see a cube on screen on the left that is not rotated
     # and a cube on the right that is. Yay!!
     
-    sys.exit('You should now have a plot of a cube not rotated and one that is rotated '
-             'When youre ready to move on delete this line. Line 225')
+    # sys.exit('You should now have a plot of a cube not rotated and one that is rotated '
+    #          'When youre ready to move on delete this line. Line 225')
     
     # %%
     # 5. Now that we know how to rotate and move a cube we can do the exact same loop as 
