@@ -117,26 +117,23 @@ def get_rodriguez_from_rotation_matrix(R):
 
 if __name__ == '__main__':   
     
-    # %% 
+
     # Shapename
-    shape_name = 'Rectangle_2.5_10_5'
+    #shape_name = 'Rectangle_2.5_10_5'
     #shape_name = '4x4x8'
-    #shape_name = 'Cube_5mm'
+    shape_name = 'Cube_5mm'
     
     track_number = 0     # Insert track you want to look at 0-9.
-    
-    
-    
-    
-    # %% 
+        
     
     column_names = ['pos_x', 'pos_y', 'pos_z', 'ori_x', 'ori_y', 'ori_z']
-    track = pd.read_csv('./' + shape_name + '/Tracks/track' + str(track_number).zfill(2) + '.csv', comment='#', names=column_names)
+    track = pd.read_csv('Victor/Project1/' + shape_name + '/Tracks/track' + str(track_number).zfill(2) + '.csv', comment='#', names=column_names)
+
 
     # Changing from degrees to radians.
     track[['ori_x', 'ori_y', 'ori_z']] = track[['ori_x', 'ori_y', 'ori_z']].apply(lambda x : np.deg2rad(x), axis=0)
     
-    # %%
+
     # Plotting position
     ylabels = ['Position x [mm]',
                'Position y [mm]', 
@@ -154,7 +151,7 @@ if __name__ == '__main__':
                'Orientation z [rad]']
     plot_xyz(ori_x_filtered, ori_y_filtered, ori_z_filtered, ylabels, 'Filtered Orientation of Particle')
 
-    #%% ==================================================================================
+    # ==================================================================================
     # Now I will show how to interpret this weird rodriguez rotation vector.
     
     # 1.
@@ -164,11 +161,10 @@ if __name__ == '__main__':
     # consisting of 3 points with 3 coordinates.
     # For simplicity I have added this as a .npy file which is loaded in the lines below.
     
-    shape_file = np.load('./' + shape_name + '/' + shape_name + '.npy')
+    shape_file = np.load('Victor/Project1/' + shape_name + '/' + shape_name + '.npy')
     vectors = shape_file - np.mean(shape_file.reshape(-1,3))  # Center shape in case 
     
 
-    # %%
     # 1. Here we illustrate in 3D the cube as it moves and as it rotates.
     positions = track[['pos_x', 'pos_y', 'pos_z']].to_numpy()
     rodriguez_vectors = track[['ori_x', 'ori_y', 'ori_z']].to_numpy()
@@ -212,7 +208,7 @@ if __name__ == '__main__':
     
     
     
-    # %% Finding velocities
+    # Finding velocities
     # To get velocity from position we need to take the derivate of position. 
     # This can be done numerically using the np.gradient function. 
     # For reference check the documentation https://numpy.org/doc/stable/reference/generated/numpy.gradient.html
@@ -226,7 +222,7 @@ if __name__ == '__main__':
     """
     
     
-    # %% Finding relative rotation.
+    # Finding relative rotation.
     """ 
         In this code the rotation is the rotation from the CAD orientation of the particle
         to the rotation we measure in the experiment. If we want to find the rotation
@@ -261,7 +257,7 @@ if __name__ == '__main__':
              'Relative to first appearance orientation'     
              )
     
-    
+    plt.show()
     
     
     
