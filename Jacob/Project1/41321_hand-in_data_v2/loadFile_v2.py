@@ -35,6 +35,7 @@ class shape():
         self._C_D = None
         self._C_n = None
         self._C_p = None
+        self._C_D_theo = None
 
     def _initialize():
         raise NotImplementedError("This method must be defined in the subclass.")
@@ -86,11 +87,20 @@ class shape():
         if self._C_p is None:
             self._C_p = 4*self.g*(self.s-1)*self.d_p/(3*self.omega_s**2)
         return self._C_p
+    
+    @property
+    def C_D_theo(self):
+        if self._C_D_theo is None:
+            c = np.pi*self.d_A/self.P_p
+            d_rat = self.d_A/self.d_n
+            Re = self.Re_D
+            self._C_D_theo = 24 / Re * d_rat * (1 + 0.15 / np.sqrt(c) * (d_rat * Re) ** 0.687) + 0.42 * d_rat**2/(np.sqrt(c)*(1 + 4.25*10**4*(d_rat * Re)**(-1.16)))
+        return self._C_D_theo
 
     def plot_Re_vs_C(self):
         # Plot Re_n vs C_n and Re_D vs C_D in two suplots. Add mean line of the mean values.
         fig, axs = plt.subplots(1, 3, figsize=(10, 5))
-        fig.suptitle('Reynolds number vs drag coefficients for ' + self.name)
+        fig.suptitle('Reynolds number vs drag coefficients for {}. Theoretical value is {}'.format(self.name, round(np.mean(self.C_D_theo),2)))
         axs[0].plot(self.Re_n, self.C_n, 'o')
         # Mean line
         axs[0].axhline(y=np.mean(self.C_n), color='r', linestyle='-', label='Mean')
@@ -223,24 +233,24 @@ class SingleDropCalculations():
         self.vel_x_filtered = self.vel_x
         self.vel_y_filtered = self.vel_y
         self.vel_z_filtered = self.vel_z
-        for idx in idx_x:
-            try:
-                # self.vel_x[idx] = np.mean(self.vel_x[idx-5:idx+6])
-                self.vel_x_filtered[idx] = (self.vel_x_filtered[idx-3] + self.vel_x_filtered[idx+3])/2
-            except:
-                pass
-        for idx in idx_y:
-            try:
-                # self.vel_y[idx] = np.mean(self.vel_y[idx-5:idx+6])
-                self.vel_y_filtered[idx] = (self.vel_y_filtered[idx-3] + self.vel_y_filtered[idx+3])/2
-            except:
-                pass
-        for idx in idx_z:
-            try:
-                # self.vel_z[idx] = np.mean(self.vel_z[idx-5:idx+6])
-                self.vel_z_filtered[idx] = (self.vel_z_filtered[idx-3] + self.vel_z_filtered[idx+3])/2
-            except:
-                pass
+        # for idx in idx_x:
+        #     try:
+        #         # self.vel_x[idx] = np.mean(self.vel_x[idx-5:idx+6])
+        #         self.vel_x_filtered[idx] = (self.vel_x_filtered[idx-3] + self.vel_x_filtered[idx+3])/2
+        #     except:
+        #         pass
+        # for idx in idx_y:
+        #     try:
+        #         # self.vel_y[idx] = np.mean(self.vel_y[idx-5:idx+6])
+        #         self.vel_y_filtered[idx] = (self.vel_y_filtered[idx-3] + self.vel_y_filtered[idx+3])/2
+        #     except:
+        #         pass
+        # for idx in idx_z:
+        #     try:
+        #         # self.vel_z[idx] = np.mean(self.vel_z[idx-5:idx+6])
+        #         self.vel_z_filtered[idx] = (self.vel_z_filtered[idx-3] + self.vel_z_filtered[idx+3])/2
+        #     except:
+        #         pass
 
         # Smooth the z velocity
         self.vel_x_filtered = savgol_filter(self.vel_x_filtered, window_length=10, polyorder=1)
@@ -444,6 +454,9 @@ class DropCalculations():
         self.x_ori = None
         self.y_ori = None
         self.z_ori = None
+        self.x_ori_rel_to_first = None
+        self.y_ori_rel_to_first = None
+        self.z_ori_rel_to_first = None
         self.speed = None
         self.speed_filtered = None
     
@@ -503,9 +516,10 @@ class DropCalculations():
             self.x_ori[:,i] = drop.ori_x_filtered[:self.N]
             self.y_ori[:,i] = drop.ori_y_filtered[:self.N]
             self.z_ori[:,i] = drop.ori_z_filtered[:self.N]
-            self.x_ori_rel_to_first[:,i] = drop.relative_to_first[:self.N,0]
-            self.y_ori_rel_to_first[:,i] = drop.relative_to_first[:self.N,1]
-            self.z_ori_rel_to_first[:,i] = drop.relative_to_first[:self.N,2]
+            # Change NaN values to 0
+            self.x_ori_rel_to_first[:,i] = np.nan_to_num(drop.relative_to_first[:self.N,0])
+            self.y_ori_rel_to_first[:,i] = np.nan_to_num(drop.relative_to_first[:self.N,1])
+            self.z_ori_rel_to_first[:,i] = np.nan_to_num(drop.relative_to_first[:self.N,2])
 
         return self.x_ori, self.y_ori, self.z_ori
     
@@ -524,11 +538,13 @@ class DropCalculations():
             ifrac = (x[2] - x[0]) / sum(x)
         return ifrac
 
-    def do_spectral_analysis_ori(self):
+    def do_spectral_analysis_ori_old(self):
         if self.x_ori is None or self.y_ori is None or self.z_ori is None:
             self.get_orientations()
 
-        for ori, ori_str in [(self.x_ori, "x orientation"), (self.y_ori, "y orientation"), (self.z_ori, "z orientation")]:
+        fig, axs = plt.subplots(3, 1, figsize=(4, 7), sharey=True)
+
+        for idx, (ori, ori_str) in enumerate([(self.x_ori, "x orientation"), (self.y_ori, "y orientation"), (self.z_ori, "z orientation")]):
             f = np.arange(self.N) / (self.N * self._sample_rate)
             sigf = np.fft.fft(ori, axis=0)
             sigspec = np.real(sigf * sigf.conjugate()) / (self.N*self._sample_rate)
@@ -536,7 +552,7 @@ class DropCalculations():
             ipeak = np.argmax(sigmean, axis=0)
             iremove = 1
             while True:
-                # Incase the peak is located at the edge of the spectrum, find the second higest peak
+                # In case the peak is located at the edge of the spectrum, find the second highest peak
                 if sigmean[ipeak+1] > sigmean[ipeak] or sigmean[ipeak-1] > sigmean[ipeak] or ipeak == 0:
                     ipeak = np.argmax(sigmean[0:self.N//2][1*iremove:])
                     iremove += 1
@@ -545,34 +561,85 @@ class DropCalculations():
             ifrac = self._gauss_interpolate(sigmean[max(0,ipeak-1): max(3, ipeak+2)])
             freq = (ipeak + ifrac) / (self.N * self._sample_rate)
 
-            fig, axs = plt.subplots(2, 1, figsize=(10, 8))
-            fig.suptitle('Analysis ' + ori_str)
             # Plot Spectrum
-            axs[0].set_title("Spectrum of {}. Frequency: {:.2f} Hz".format(ori_str, freq))
-            axs[0].loglog(f[0:self.N//2], sigmean[0:self.N//2], label='Spectrum')
-            axs[0].set_xlabel('Frequency [Hz]')
-            axs[0].set_ylabel('Power [mm^2/s^2]')
-            axs[0].legend()
-            axs[0].grid()
+            axs[idx].set_title("Spectrum of {}".format(ori_str))
+            axs[idx].loglog(f[0:self.N//2], sigmean[0:self.N//2])
+            if not ori_str == "z orientation":
+                axs[idx].axvline(x=freq, color='grey', linestyle='--', label='Peak at {:.2f} Hz'.format(freq))
+            axs[idx].set_xlabel('f [Hz]')
+            axs[idx].set_ylabel('S(f)')
+            axs[idx].legend()
+            axs[idx].grid()
+            # Add minor ticks and grid
+            axs[idx].minorticks_on()
+            axs[idx].grid(which='minor', axis='both', linestyle=':', linewidth='0.5', color='black')
 
-            # Plot Velocity
-            axs[1].plot(np.arange(self.N) * self._sample_rate, ori)
-            axs[1].set_xlabel('Time')
-            axs[1].set_ylabel('Velocity [mm/s]')
-            axs[1].set_title('Velocity of particle')
-            axs[1].grid(which='both', axis='both')
-            axs[1].minorticks_on()
-            axs[1].grid(which='minor', axis='both', linestyle=':', linewidth='0.5', color='black')
+            # # Plot Velocity
+            # axs[1].plot(np.arange(self.N) * self._sample_rate, ori)
+            # axs[1].set_xlabel('Time')
+            # axs[1].set_ylabel('Velocity [mm/s]')
+            # axs[1].set_title('Velocity of particle')
+            # axs[1].grid(which='both', axis='both')
+            # axs[1].minorticks_on()
+            # axs[1].grid(which='minor', axis='both', linestyle=':', linewidth='0.5', color='black')
 
             plt.tight_layout()
 
             stop = True
-    
-    def do_spectral_analysis(self):
+
+    def do_spectral_analysis_ori(self):
+        if self.x_ori is None or self.y_ori is None or self.z_ori is None:
+            self.get_orientations()
+
+        # Create a single plot
+        plt.figure(figsize=(6, 3))
+
+        # Iterate over orientations
+        for idx, (ori, ori_str) in enumerate([(self.x_ori, "x orientation"), (self.y_ori, "y orientation"), (self.z_ori, "z orientation")]):
+            f = np.arange(self.N) / (self.N * self._sample_rate)
+            sigf = np.fft.fft(ori, axis=0)
+            sigspec = np.real(sigf * sigf.conjugate()) / (self.N*self._sample_rate)
+            sigmean = np.mean(sigspec[0:self.N//2], axis=1)
+            ipeak = np.argmax(sigmean, axis=0)
+            iremove = 1
+            while True:
+                # In case the peak is located at the edge of the spectrum, find the second highest peak
+                if sigmean[ipeak+1] > sigmean[ipeak] or sigmean[ipeak-1] > sigmean[ipeak] or ipeak == 0:
+                    ipeak = np.argmax(sigmean[0:self.N//2][1*iremove:])
+                    iremove += 1
+                else:
+                    break
+            ifrac = self._gauss_interpolate(sigmean[max(0,ipeak-1): max(3, ipeak+2)])
+            freq = (ipeak + ifrac) / (self.N * self._sample_rate)
+
+            # Plot Spectrum
+            if not ori_str == "z orientation":
+                plt.loglog(f[0:self.N//2], sigmean[0:self.N//2], label="{} - Peak at {:.2f} Hz".format(ori_str, freq), alpha=0.8)
+            else:
+                plt.loglog(f[0:self.N//2], sigmean[0:self.N//2], label="{}".format(ori_str), alpha=0.8)
+
+            # # Add vertical lines for x and y orientations
+            # if ori_str == "x orientation" or ori_str == "y orientation":
+            #     plt.axvline(x=freq, color='grey', linestyle='--')
+
+        # Add labels and legend
+        plt.title("Spectrum of orientation components")
+        plt.xlabel('f [Hz]')
+        plt.ylabel('S(f)')
+        plt.legend()
+        plt.grid()
+        # Add minor ticks and grid
+        plt.minorticks_on()
+        plt.grid(which='minor', axis='both', linestyle=':', linewidth='0.5', color='black')
+
+    def do_spectral_analysis_old(self):
         if self.x_vel is None or self.y_vel is None or self.z_vel is None or self.x_vel_filtered is None or self.y_vel_filtered is None or self.z_vel_filtered is None:
             self.get_velocities()
 
-        for vel, vel_str in [(self.x_vel_filtered, "x velocity"), (self.y_vel_filtered, "y velocity"), (self.z_vel_filtered, "z velocity")]:
+        fig, axs = plt.subplots(3, 1, figsize=(4, 7), sharey=True)
+
+        for idx, (vel, vel_str) in enumerate([(self.x_vel_filtered, "x velocity"), (self.y_vel_filtered, "y velocity"), (self.z_vel_filtered, "z velocity")]):
+
             f = np.arange(self.N) / (self.N * self._sample_rate)
             sigf = np.fft.fft(vel, axis=0)
             sigspec = np.real(sigf * sigf.conjugate()) / (self.N*self._sample_rate)
@@ -580,7 +647,60 @@ class DropCalculations():
             ipeak = np.argmax(sigmean, axis=0)
             iremove = 1
             while True:
-                # Incase the peak is located at the edge of the spectrum, find the second higest peak
+                # In case the peak is located at the edge of the spectrum, find the second highest peak
+                if sigmean[ipeak+1] > sigmean[ipeak] or sigmean[ipeak-1] > sigmean[ipeak] or ipeak == 0:
+                    ipeak = np.argmax(sigmean[0:self.N//2][1*iremove:])
+                    iremove += 1
+                else:
+                    break
+            ipeak = ipeak + 1*iremove - 1
+            ifrac = self._gauss_interpolate(sigmean[ipeak-1:ipeak+2])
+            freq = (ipeak + ifrac) / (self.N * self._sample_rate)
+
+            # Plot Spectrum
+            axs[idx].set_title("Spectrum of {}".format(vel_str))
+            axs[idx].loglog(f[0:self.N//2], sigmean[0:self.N//2])
+            if not vel_str == "z velocity":
+                axs[idx].axvline(x=freq, color='grey', linestyle='--', label='Peak at {:.2f} Hz'.format(freq))
+            axs[idx].set_xlabel('f [Hz]')
+            axs[idx].set_ylabel('S(f)')
+            axs[idx].legend()
+            axs[idx].grid()
+            # Add minor ticks and grid
+            axs[idx].minorticks_on()
+            axs[idx].grid(which='minor', axis='both', linestyle=':', linewidth='0.5', color='black')
+
+
+            # # Plot Velocity
+            # axs[1].plot(np.arange(self.N) * self._sample_rate, vel)
+            # axs[1].set_xlabel('Time')
+            # axs[1].set_ylabel('Velocity [mm/s]')
+            # axs[1].set_title('Velocity of particle')
+            # axs[1].grid(which='both', axis='both')
+            # axs[1].minorticks_on()
+            # axs[1].grid(which='minor', axis='both', linestyle=':', linewidth='0.5', color='black')
+
+            plt.tight_layout()
+
+            stop = True
+
+    def do_spectral_analysis(self):
+        if self.x_vel is None or self.y_vel is None or self.z_vel is None or self.x_vel_filtered is None or self.y_vel_filtered is None or self.z_vel_filtered is None:
+            self.get_velocities()
+
+        # Create a single plot
+        plt.figure(figsize=(6, 3))
+
+        # Iterate over orientations
+        for idx, (vel, vel_str) in enumerate([(self.x_vel_filtered, "x velocity"), (self.y_vel_filtered, "y velocity"), (self.z_vel_filtered, "z velocity")]):
+            f = np.arange(self.N) / (self.N * self._sample_rate)
+            sigf = np.fft.fft(vel, axis=0)
+            sigspec = np.real(sigf * sigf.conjugate()) / (self.N*self._sample_rate)
+            sigmean = np.mean(sigspec[0:self.N//2], axis=1)
+            ipeak = np.argmax(sigmean, axis=0)
+            iremove = 1
+            while True:
+                # In case the peak is located at the edge of the spectrum, find the second highest peak
                 if sigmean[ipeak+1] > sigmean[ipeak] or sigmean[ipeak-1] > sigmean[ipeak] or ipeak == 0:
                     ipeak = np.argmax(sigmean[0:self.N//2][1*iremove:])
                     iremove += 1
@@ -589,29 +709,27 @@ class DropCalculations():
             ifrac = self._gauss_interpolate(sigmean[max(0,ipeak-1): max(3, ipeak+2)])
             freq = (ipeak + ifrac) / (self.N * self._sample_rate)
 
-            fig, axs = plt.subplots(2, 1, figsize=(10, 8))
-            fig.suptitle('Analysis ' + vel_str)
             # Plot Spectrum
-            axs[0].set_title("Spectrum of {}. Frequency: {:.2f} Hz".format(vel_str, freq))
-            axs[0].loglog(f[0:self.N//2], sigmean[0:self.N//2], label='Spectrum')
-            axs[0].set_xlabel('Frequency [Hz]')
-            axs[0].set_ylabel('Power [mm^2/s^2]')
-            axs[0].legend()
-            axs[0].grid()
+            if not vel_str == "z velocity":
+                plt.loglog(f[0:self.N//2], sigmean[0:self.N//2], label="{} - Peak at {:.2f} Hz".format(vel_str, freq), alpha=0.8)
+            else:
+                plt.loglog(f[0:self.N//2], sigmean[0:self.N//2], label="{}".format(vel_str), alpha=0.8)
 
-            # Plot Velocity
-            axs[1].plot(np.arange(self.N) * self._sample_rate, vel)
-            axs[1].set_xlabel('Time')
-            axs[1].set_ylabel('Velocity [mm/s]')
-            axs[1].set_title('Velocity of particle')
-            axs[1].grid(which='both', axis='both')
-            axs[1].minorticks_on()
-            axs[1].grid(which='minor', axis='both', linestyle=':', linewidth='0.5', color='black')
+            # # Add vertical lines for x and y orientations
+            # if ori_str == "x velocity" or ori_str == "y velocity":
+            #     plt.axvline(x=freq, color='grey', linestyle='--')
 
-            plt.tight_layout()
+        # Add labels and legend
+        plt.title("Spectrum of velocity components")
+        plt.xlabel('f [Hz]')
+        plt.ylabel('S(f)')
+        plt.legend()
+        plt.grid()
+        # Add minor ticks and grid
+        plt.minorticks_on()
+        plt.grid(which='minor', axis='both', linestyle=':', linewidth='0.5', color='black')
 
-            stop = True
-    
+
     def get_mean_velocities(self):
         if self.x_vel is None or self.y_vel is None or self.z_vel is None or self.x_vel_filtered is None or self.y_vel_filtered is None or self.z_vel_filtered is None:
             self.get_velocities()
@@ -676,11 +794,29 @@ class DropCalculations():
         fig, ax = plt.subplots(1, 1, figsize=(10, 5))
         fig.suptitle('Speed vs orientation for ' + self._shape_name)
         for i in range(len(self.drops)):
-            ax.scatter(np.abs(self.y_ori[:,i] - np.mean(self.y_ori[:,i])), np.abs(self.z_vel_filtered[:,i]))
-            # ax.scatter(np.abs(self.y_ori[:,i] - np.mean(self.y_ori[:,i]))[1:], np.diff(np.abs(self.z_vel_filtered[:,i])))
+            # ax.scatter(np.abs(self.y_ori_rel_to_first[:,i] - np.mean(self.y_ori_rel_to_first[:,i])), np.abs(self.z_vel_filtered[:,i]), alpha=.5, s=15)
+            ax.scatter(self.y_ori_rel_to_first[:,i] - np.mean(self.y_ori_rel_to_first[:,i]), np.abs(self.z_vel_filtered[:,i])/(max(np.abs(self.z_vel_filtered[:,i]))), alpha=.2, s=15)
+            # ax.scatter(self.y_ori_rel_to_first[:,i], np.abs(self.z_vel_filtered[:,i])/(max(np.abs(self.z_vel_filtered[:,i]))), alpha=.5, s=15)
         ax.set_xlabel('Y orientation')
         ax.set_ylabel('Z velocity [mm/s]')
         ax.set_title('Speed vs orientation')
+
+        # Plot the speed vs the orientation in a histogram
+        fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+        fig.suptitle('Speed vs orientation for ' + self._shape_name)
+        y_ori = []
+        z_vel = []
+        test = list(self.y_ori_rel_to_first)
+        for i in range(len(self.drops)):
+            # ax.hist2d(self.y_ori_rel_to_first[:,i] - np.mean(self.y_ori_rel_to_first[:,i]), np.abs(self.z_vel_filtered[:,i]), bins=50)
+            # ax.hist2d(self.y_ori_rel_to_first[:,i] - np.mean(self.y_ori_rel_to_first[:,i]), np.abs(self.z_vel_filtered[:,i])/(max(np.abs(self.z_vel_filtered[:,i]))), bins=50)
+            y_ori.extend(self.y_ori_rel_to_first[:,i] - np.mean(self.y_ori_rel_to_first[:,i]))
+            z_vel.extend(np.abs(self.z_vel_filtered[:,i])/(max(np.abs(self.z_vel_filtered[:,i]))))
+            ax.hist2d(y_ori, z_vel, bins=50)
+        ax.set_xlabel('Y orientation')
+        ax.set_ylabel('Z velocity [mm/s]')
+        ax.set_title('Speed vs orientation')
+
         stop = True
 
 class cube(shape):
@@ -753,18 +889,18 @@ if __name__ == '__main__':
     # shape_name = "Cube_5mm"
     # shape_name = "4x4x8"
 
-    if True:
+    if False:
         track_number = 1
         single_drop = SingleDropCalculations(file_path, shape_name, track_number)
         single_drop.do_calculations(plot=True)
 
-    if False:
+    if True:
         test_drops = DropCalculations(file_path, shape_name)
         test_drops.do_spectral_analysis()
         test_drops.do_spectral_analysis_ori()
         
 
-    if True:
+    if False:
         test_drops = DropCalculations(file_path, shape_name)
         test_drops.get_mean_velocities()
         test_drops.plot_speed_vs_orientation()
