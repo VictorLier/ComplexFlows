@@ -113,7 +113,49 @@ def get_rodriguez_from_rotation_matrix(R):
         if theta > np.pi:  # Adjust sign if necessary
             vector = -vector
         return vector * theta
+
+
+def remove_outliers_iqr(data, percentile=0.25):
+  """
+  Removes outliers from a NumPy array using the Interquartile Range (IQR) method.
+
+  Args:
+      data: The NumPy array containing the data.
+      percentile: The percentile used to define the IQR (default: 0.25).
+
+  Returns:
+      A NumPy array with outliers removed.
+  """
+  q1 = np.percentile(data, percentile * 100)
+  q3 = np.percentile(data, (1 - percentile) * 100)
+  iqr = q3 - q1
+  lower_bound = q1 - 1.5 * iqr
+  upper_bound = q3 + 1.5 * iqr
+  return data[(data >= lower_bound) & (data <= upper_bound)]
+
+
+def replace_outliers_with_neighbor_mean(arr, threshold=8):
+    # Calculate the mean and standard deviation of the array
+    arr_mean = np.mean(arr)
+    arr_std = np.std(arr)
     
+    # Identify outliers
+    outliers = np.abs(arr - arr_mean) > threshold * arr_std
+    
+    # Replace outliers with the mean of their neighboring values
+    for i in range(len(arr)):
+        if outliers[i]:
+            # Find the neighboring values (excluding the outlier itself)
+            neighbor_indices = [max(0, i - 1), min(len(arr) - 1, i + 1)]
+            neighbor_values = arr[np.logical_and(~outliers, np.isin(range(len(arr)), neighbor_indices))]
+            neighbor_mean = np.mean(neighbor_values)
+            arr[i] = neighbor_mean
+    
+    return arr
+
+
+
+
 
 if __name__ == '__main__':   
     
@@ -123,7 +165,7 @@ if __name__ == '__main__':
     #shape_name = '4x4x8'
     shape_name = 'Cube_5mm'
     
-    track_number = 0     # Insert track you want to look at 0-9.
+    track_number = 1     # Insert track you want to look at 0-9.
         
     
     column_names = ['pos_x', 'pos_y', 'pos_z', 'ori_x', 'ori_y', 'ori_z']
@@ -138,7 +180,7 @@ if __name__ == '__main__':
     ylabels = ['Position x [mm]',
                'Position y [mm]', 
                'Position z [mm]']
-    plot_xyz(track.pos_x, track.pos_y, track.pos_z, ylabels, 'Position of Particle')
+    #plot_xyz(track.pos_x, track.pos_y, track.pos_z, ylabels, 'Position of Particle')
     
     # If you would like to filter the signal you could among many things do as below
     # Experiment with the window_length adn polyorder.
@@ -149,7 +191,7 @@ if __name__ == '__main__':
     ylabels = ['Orientation x [rad]',
                'Orientation y [rad]', 
                'Orientation z [rad]']
-    plot_xyz(ori_x_filtered, ori_y_filtered, ori_z_filtered, ylabels, 'Filtered Orientation of Particle')
+    #plot_xyz(ori_x_filtered, ori_y_filtered, ori_z_filtered, ylabels, 'Filtered Orientation of Particle')
 
     # ==================================================================================
     # Now I will show how to interpret this weird rodriguez rotation vector.
@@ -181,6 +223,7 @@ if __name__ == '__main__':
         # After rotation we move all vectors
         translation_vector = positions[i]
         vectors_rotated_and_translated.append( rotated_vectors + translation_vector )
+
     
     # First we create a plot
     fig = plt.figure()
@@ -214,6 +257,36 @@ if __name__ == '__main__':
     # For reference check the documentation https://numpy.org/doc/stable/reference/generated/numpy.gradient.html
     sample_rate = 1.0/100.0     # We are filming at 100 fps so each measurement is space by 1/!00 of a second
     velocities = np.gradient(positions, sample_rate, axis=0)
+    velocities = velocities / 1000.0
+    plot_xyz(
+             velocities[:,0],
+             velocities[:,1],
+             velocities[:,2],
+             ['Velocity x [m/s]',
+              'Velocity y [m/s]',
+              'Velocity z [m/s]'],
+              'Velocity in each direction'
+             )
+
+    # Total velocity throug the water
+
+    TotVelocity = np.linalg.norm(velocities, axis = 1)
+    plt.figure()
+    plt.plot(TotVelocity)
+
+    CleanTotVelocity = replace_outliers_with_neighbor_mean(TotVelocity)
+    plt.figure()
+    plt.plot(CleanTotVelocity)
+
+    Filt_Tot_Velo = savgol_filter(CleanTotVelocity,window_length=10,polyorder=1)
+    plt.figure()
+    plt.plot(Filt_Tot_Velo)
+
+    Acceleration = np.diff(Filt_Tot_Velo)
+    Filt_Acceleration = savgol_filter(Acceleration,window_length=10,polyorder=1)
+    plt.figure()
+    plt.plot(Filt_Acceleration)
+
     """
         NOTE: At some point the particle stop being tracked by one camera set starts being 
         tracked by the next set of cameras. This gives a large spike in velocity.
@@ -247,6 +320,7 @@ if __name__ == '__main__':
     
     relative_to_first = np.array(relative_to_first)
     
+    
     plot_xyz(
              relative_to_first[:,0],
              relative_to_first[:,1],
@@ -260,10 +334,8 @@ if __name__ == '__main__':
     plt.show()
     
     
-    
-    
-    
-    
+
+    print(stop)
     
     
     
