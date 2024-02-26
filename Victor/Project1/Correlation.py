@@ -75,6 +75,15 @@ Oriz = savgol_filter(Oriz, window_length=10, polyorder=1)
 Orientation = np.stack((Orix,Oriy,Oriz,speed),axis=1)
 
 
+#plt.figure()
+#plt.plot(Orientation[:,0], label='x')
+#plt.plot(Orientation[:,1], label='y')
+#plt.plot(Orientation[:,2], label='z')
+#plt.plot(Orientation[:,3], label='speed')
+#plt.legend()
+
+
+
 
 for track_number in range(9):
     data = np.loadtxt('Victor/Project1/' + shape_name + '/Tracks/track0' + str(track_number) + '.csv', skiprows=1, delimiter=",", comments="#")
@@ -119,6 +128,8 @@ for track_number in range(9):
 
     speed = np.sqrt(velocitiy_x**2 + velocitiy_y**2 + velocitiy_z**2)
 
+    #Acceleration = np.sqrt(Acceleration_x**2 + Acceleration_y**2 + Acceleration_z**2)
+
     #Direction
     Vel_direc_x = velocitiy_x/speed
     Vel_direc_y = velocitiy_y/speed
@@ -137,12 +148,12 @@ for track_number in range(9):
     Orientation = np.vstack((Orientation, OriWorking))
 
 
-plt.figure()
-plt.plot(Orientation[:,0], label='x')
-plt.plot(Orientation[:,1], label='y')
-plt.plot(Orientation[:,2], label='z')
-plt.plot(Orientation[:,3], label='speed')
-plt.legend()
+#plt.figure()
+#plt.plot(Orientation[:,0], label='x')
+#plt.plot(Orientation[:,1], label='y')
+#plt.plot(Orientation[:,2], label='z')
+#plt.plot(Orientation[:,3], label='speed')
+#plt.legend()
 
 
 if shape_name == 'Rectangle_2.5_10_5':
@@ -153,10 +164,14 @@ if shape_name == 'Rectangle_2.5_10_5':
     ax.scatter(Orientation[:,0], Orientation[:,1], Orientation[:,3], c=Orientation[:,3], cmap='viridis', alpha=0.8)
 
     # Configure plot labels and title
-    ax.set_xlabel('Orix')
-    ax.set_ylabel('Oriy')
-    ax.set_zlabel('Speed')
-    ax.set_title('3D Plot with Speed on Z-Axis')
+    ax.set_xlabel('x-orientation [deg.]')
+    ax.set_ylabel('y-orientaion [deg.]')
+    ax.set_zlabel('Speed [mm/s]')
+    #ax.set_title('3D Plot with Speed on Z-Axis')
+
+    #import tikzplotlib
+
+    #tikzplotlib.save("Victor/Project1/test.tex")
 
 
 plt.show()

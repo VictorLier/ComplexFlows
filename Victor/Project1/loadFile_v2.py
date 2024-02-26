@@ -161,9 +161,9 @@ if __name__ == '__main__':
     
 
     # Shapename
-    #shape_name = 'Rectangle_2.5_10_5'
+    shape_name = 'Rectangle_2.5_10_5'
     #shape_name = '4x4x8'
-    shape_name = 'Cube_5mm'
+    #shape_name = 'Cube_5mm'
     
     track_number = 1     # Insert track you want to look at 0-9.
         
