@@ -145,7 +145,14 @@ def move(fluidfield, time: float):
     return fluidfield
 
 
-# def collision(particle1, particle2):
+def collision(particle1, particle2):
+    n = np.array([particle2.x - particle1.x, particle2.y - particle1.y]) / particle1.r
+    G0 = np.array([particle1.vx - particle2.vx, particle1.vy - particle2.vy])
+    dvel = n * np.dot(n, G0)
+    particle1.vx -= dvel[0]
+    particle1.vy -= dvel[1]
+    particle2.vx += dvel[0]
+    particle2.vy += dvel[1]
 
 
 class Particle:
