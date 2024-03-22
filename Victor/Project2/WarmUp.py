@@ -46,7 +46,7 @@ def time_collision(r_1, r_2, x_1: list[float, float], x_2: list[float, float], v
 
     if t < 0:
         t = None
-        return t
+    return t
 
 
 
@@ -56,9 +56,9 @@ if __name__ == "__main__":
     r_1 = 1
     r_2 = 1
     x_1 = np.array([0,0])
-    x_2 = np.array([3,0])
-    v_1 = np.array([0,0])
-    v_2 = np.array([-1,1])
+    x_2 = np.array([10,4])
+    v_1 = np.array([-1,2])
+    v_2 = np.array([1,1])
 
     t = time_collision(r_1,r_2,x_1, x_2, v_1, v_2)
 
