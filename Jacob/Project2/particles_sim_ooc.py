@@ -12,6 +12,7 @@ class particle():
         self.position = position
         self.velocity = velocity
         self.radius = radius
+        self.I = 2/5 * self.radius ** 2
         self.color1 = (20, 20, 250)
         self.color2 = (200, 200, 250)
         self.angle = angle
@@ -38,6 +39,18 @@ class particle():
             self.velocity[1] = abs(self.velocity[1])
         if self.position[1] > window_size[1] - self.radius :
             self.velocity[1] = -abs(self.velocity[1])
+
+    @property
+    def rotational_kinetic_energy(self):
+        return 0.5 * self.I * self.omega ** 2
+    
+    @property
+    def translational_kinetic_energy(self):
+        return 0.5 * np.linalg.norm(self.velocity) ** 2
+    
+    @property
+    def kinetic_energy(self):
+        return self.rotational_kinetic_energy + self.translational_kinetic_energy
 
 
 class sim_particles():
@@ -117,7 +130,7 @@ class sim_particles():
             for j in range(i+1, self.nparticles):
                 x_j = np.append(self.particles[j].position,0)
                 distance = np.sqrt(((x_j - x_i)**2).sum())
-                if  distance < 2 * self.radius:
+                if  distance <= 2 * self.radius:
                     # collision! - apply textbook eq. 5.14
                     if self.collisions[i,j] == 1:
                         continue
@@ -135,19 +148,29 @@ class sim_particles():
 
                     n = (x_j - x_i) / distance # unit vector between the i-th and j-th particle at the moment of contact
                     G0 = v_i - v_j # relative velocity at the moment of contact
+                    G0_c = G0 + np.cross(r_i*omega_i, n) + np.cross(r_j*omega_j, n) # relative velocity at the moment of contact in the contact frame
+                    G0_ct = G0_c - np.dot(G0_c, n) * n # relative velocity at the moment of contact in the tangential frame
 
                     # Get the unit vector in the tangential frame from n
-                    t = np.array([-n[1], n[0], 0])
+                    t_test = np.array([-n[1], n[0], 0])
+                    t = G0_ct / np.linalg.norm(G0_ct) # unit vector in the tangential frame
+                    cs = False
+                    if self.f == 0:
+                        cs = True
+                    if cs or np.dot(n, G0)/np.linalg.norm(G0_ct) < (2/7)*1/(self.f * (1 + self.e)): 
+                        # Continuous sliding
+                        v_i_1 = v_i - (n + self.f * t) * np.dot(n, G0) * (1 + self.e) * m_j / (m_i + m_j)
+                        v_j_1 = v_j + (n + self.f * t) * np.dot(n, G0) * (1 + self.e) * m_i / (m_i + m_j)
 
-                    # G0_c = G0 + np.cross(r_i*omega_i, n) + np.cross(r_j*omega_j, n) # relative velocity at the moment of contact in the contact frame
-                    # G_ct = G0_c - np.dot(G0_c, n) * n # relative velocity at the moment of contact in the tangential frame
-                    # t = G_ct / np.linalg.norm(G_ct) # unit vector in the tangential frame
+                        omega_i_1 = omega_i - 5/(2*r_i) * np.dot(n, G0) * np.cross(n, t) * self.f * (1 + self.e) * m_j / (m_i + m_j)
+                        omega_j_1 = omega_j - 5/(2*r_j) * np.dot(n, G0) * np.cross(n, t) * self.f * (1 + self.e) * m_i / (m_i + m_j)
 
-                    v_i_1 = v_i - (n + self.f * t) * np.dot(n, G0) * (1 + self.e) * m_j / (m_i + m_j)
-                    v_j_1 = v_j + (n + self.f * t) * np.dot(n, G0) * (1 + self.e) * m_i / (m_i + m_j)
+                    else:
+                        v_i_1 = v_i - ((1 + self.e) * np.dot(n, G0) * n + 2/7 * np.linalg.norm(G0_ct) * t) * m_j / (m_i + m_j)
+                        v_j_1 = v_j + ((1 + self.e) * np.dot(n, G0) * n + 2/7 * np.linalg.norm(G0_ct) * t) * m_i / (m_i + m_j)
 
-                    omega_i_1 = omega_i - 5/(2*r_i) * np.dot(n, G0) * np.cross(n, t) * self.f * (1 + self.e) * m_j / (m_i + m_j)
-                    omega_j_1 = omega_j + 5/(2*r_j) * np.dot(n, G0) * np.cross(n, t) * self.f * (1 + self.e) * m_i / (m_i + m_j)
+                        omega_i_1 = omega_i - 5/(7*r_i) * np.linalg.norm(G0_ct) * np.cross(n, t) * m_j / (m_i + m_j)
+                        omega_j_1 = omega_j - 5/(7*r_j) * np.linalg.norm(G0_ct) * np.cross(n, t) * m_i / (m_i + m_j) 
 
                     self.particles[i].velocity = v_i_1[:2]
                     self.particles[j].velocity = v_j_1[:2]
@@ -161,7 +184,6 @@ class sim_particles():
                     stop = True
                 else:
                     self.collisions[i,j] = 0
-
 
     def time_before_collision_particle(self, particle_a: particle, particle_b: particle):
         r1 = particle_a.radius
@@ -235,7 +257,7 @@ class sim_particles():
             self.tau_pw_matrix[i] = self.time_before_collision_wall(self.particles[i])
 
     def get_total_kinetic_energy(self):
-        return 0.5 * np.sum([np.linalg.norm(particle.velocity) ** 2 for particle in self.particles])
+        return np.sum([particle.kinetic_energy for particle in self.particles])
     
     def get_velocities(self):
         return [np.linalg.norm(particle.velocity) for particle in self.particles]
@@ -255,6 +277,11 @@ class sim_particles():
             free_path.append(v * tau)
         return np.mean(free_path)
 
+    def update_stats(self):
+        self.kinetic_energy.append(self.get_total_kinetic_energy())
+        self.velocity.append(self.get_velocities())
+        self.mean_free_path.append(self.get_mean_free_path())
+
     def simulate(self, T, N):
         dt = T / N
         for i in range(N):
@@ -263,9 +290,7 @@ class sim_particles():
             self.wall_collision()
             self.particle_collision()
             self.time_before_collision_matrix()
-            self.kinetic_energy.append(self.get_total_kinetic_energy())
-            self.velocity.append(self.get_velocities())
-            self.mean_free_path.append(self.get_mean_free_path())
+            self.update_stats()
 
     def plot_kinetic_energy(self, T, N):
         plt.figure()
@@ -298,13 +323,23 @@ class sim_particles():
 
 if __name__ == '__main__':
     _window_size = np.array((800, 800)) # window size
-    _nparticles = 20 # number of particles
+    _nparticles = 40 # number of particles
     _radius = 20 # radius of the particles
-    _e = 1 # coefficient of restitution
+    _e = 1.0 # coefficient of restitution
     _f = 0 # coefficient of friction
     sim = sim_particles(_window_size, _nparticles, _radius, _e, _f)
 
     if True:
+        T = 50
+        N = 2000
+        sim.simulate(T, N)
+        sim.plot_kinetic_energy(T, N)
+        sim.plot_mean_free_path(T, N)
+        sim.plot_velocity_distribution(T, N, [0, N-1])
+        plt.show()
+        stop = True
+
+    if False:
         window = pyglet.window.Window(sim.window_size[0], sim.window_size[1])
         batch = pyglet.graphics.Batch()
 
@@ -313,7 +348,7 @@ if __name__ == '__main__':
             window.clear()
             batch.draw()
 
-        pyglet.clock.schedule_interval(sim.update_to_pyglet, 1/640.0)
+        pyglet.clock.schedule_interval(sim.update_to_pyglet, 1/120.0)
 
         sim.make_particles_pyglet(batch)
         
@@ -321,14 +356,4 @@ if __name__ == '__main__':
 
         del window
         del batch
-
-    if False:
-        T = 10
-        N = 1000
-        sim.simulate(T, N)
-        sim.plot_kinetic_energy(T, N)
-        sim.plot_mean_free_path(T, N)
-        sim.plot_velocity_distribution(T, N, [0, N-1])
-        plt.show()
-        stop = True
             
