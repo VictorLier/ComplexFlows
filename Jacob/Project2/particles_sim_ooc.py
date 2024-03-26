@@ -6,13 +6,15 @@ import pyglet
 np.random.seed(1917)
 
 class particle():
-    def __init__(self, e = 0.5, f = 0.5, radius = 20, position = np.array((0, 0)), velocity = np.array((0, 0)), angle = 0, omega = 0):
+    def __init__(self, e = 0.5, f = 0.5, rho = 1, radius = 20, position = np.array((0, 0)), velocity = np.array((0, 0)), angle = 0, omega = 0):
         self.e = e
         self.f = f
+        self.rho = rho
         self.position = position
         self.velocity = velocity
         self.radius = radius
-        self.I = 2/5 * self.radius ** 2
+        self.mass = 4/3 * np.pi * self.radius ** 3 * self.rho
+        self.I = 2/5 * self.mass * self.radius ** 2
         self.color1 = (20, 20, 250)
         self.color2 = (200, 200, 250)
         self.angle = angle
@@ -29,7 +31,7 @@ class particle():
         self.circle.position = self.position[0], self.position[1]
         self.circle2.position = self.position[0] + 0.5 * self.radius * np.cos(self.angle), self.position[1] + 0.5 * self.radius * np.sin(self.angle)
 
-    def wall_collision(self, window_size):
+    def wall_collision_old(self, window_size):
         # handle particle collition with the walls
         if self.position[0] < self.radius:
             self.velocity[0] = abs(self.velocity[0])
@@ -40,29 +42,44 @@ class particle():
         if self.position[1] > window_size[1] - self.radius :
             self.velocity[1] = -abs(self.velocity[1])
 
+    def wall_collision(self, window_size):
+        # handle particle collition with the walls
+        if self.position[0] < self.radius:
+            self.velocity[0] = abs(self.velocity[0])
+        if self.position[0] > window_size[0] - self.radius :
+            self.velocity[0] = -abs(self.velocity[0])
+        if self.position[1] < self.radius:
+            self.velocity[1] = abs(self.velocity[1])
+        if self.position[1] > window_size[1] - self.radius :
+            self.velocity[1] = -abs(self.velocity[1])
+        
+
     @property
     def rotational_kinetic_energy(self):
         return 0.5 * self.I * self.omega ** 2
     
     @property
     def translational_kinetic_energy(self):
-        return 0.5 * np.linalg.norm(self.velocity) ** 2
+        return 0.5 * self.mass * np.linalg.norm(self.velocity) ** 2
     
     @property
     def kinetic_energy(self):
         return self.rotational_kinetic_energy + self.translational_kinetic_energy
 
-
 class sim_particles():
-    def __init__(self, window_size = np.array((800, 800)), nparticles = 20, radius = 20, e = 0.5, f = 0.5):
+    def __init__(self, window_size = np.array((800, 800)), nparticles = 20, e = 0.5, f = 0.5):
         
         self.window_size = window_size
         self.nparticles = nparticles
-        self.radius = radius
+        
         self.e = e
         self.f = f
         self.max_velocity = 200
         self.max_omega = 0.5
+
+        self.max_rho = 1
+        self.max_radius = 20
+
         self.color1 = (20, 20, 250)
         self.color2 = (200, 200, 250)
         self.particles: list[particle] = []
@@ -79,12 +96,18 @@ class sim_particles():
 
         self.make_particles()
              
-    def make_particles(self):
+    def make_particles(self, random_particles = False):
+        if random_particles:
+            rho = np.random.rand(self.nparticles) * self.max_rho
+            radius = np.random.rand(self.nparticles) * self.max_radius
+        else:
+            rho = np.full(self.nparticles, self.max_rho)
+            radius = np.full(self.nparticles, self.max_radius)
         # make particles in a grid at least one diameter from walls  
-        self.xstart =  np.ones(2) * self.radius * 2
+        self.xstart =  np.ones(2) * self.max_radius * 2
         self.xlength = self.window_size - 2 * self.xstart
         # Check if the number of particles is too large for the window
-        if self.nparticles > self.xlength[0] * self.xlength[1] / (2 * self.radius) ** 2:
+        if self.nparticles > self.xlength[0] * self.xlength[1] / (np.pi * self.max_radius ** 2):
             raise ValueError('Number of particles is too large for the window')
         n = np.ceil(np.sqrt(self.nparticles))
         m = np.ceil(self.nparticles / n)
@@ -100,16 +123,16 @@ class sim_particles():
                     * np.array([np.cos(velangle), np.sin(velangle)]).T
         omega = (np.random.rand(self.nparticles) - 0.5) * 2 * self.max_omega
         for i in range(self.nparticles):
-            self.particles.append(particle(self.e, self.f, self.radius, position[i], velocity[i], 0, omega[i]))
+            self.particles.append(particle(self.e, self.f, rho[i], radius[i], position[i], velocity[i], 0, omega[i]))
 
     def make_particles_pyglet(self, batch):
         for i in range(self.nparticles):
             self.particles[i].circle = pyglet.shapes.Circle(self.particles[i].position[0], 
                                                             self.particles[i].position[1], 
-                                                            self.radius, color = self.color1, batch = batch)
-            self.particles[i].circle2 = pyglet.shapes.Circle(self.particles[i].position[0] + 0.5 * self.radius * np.cos(self.particles[i].angle), 
-                                                            self.particles[i].position[1] + 0.5 * self.radius * np.sin(self.particles[i].angle), 
-                                                            0.25 * self.radius, color = self.color2, batch = batch)
+                                                            self.particles[i].radius, color = self.color1, batch = batch)
+            self.particles[i].circle2 = pyglet.shapes.Circle(self.particles[i].position[0] + 0.5 * self.particles[i].radius * np.cos(self.particles[i].angle), 
+                                                            self.particles[i].position[1] + 0.5 * self.particles[i].radius * np.sin(self.particles[i].angle), 
+                                                            0.25 * self.particles[i].radius, color = self.color2, batch = batch)
     
     def move_particles(self, dt):
         for i in range(self.nparticles):
@@ -127,24 +150,24 @@ class sim_particles():
     def particle_collision(self):
         for i in range(self.nparticles-1):
             x_i = np.append(self.particles[i].position,0)
+            r_i = self.particles[i].radius
             for j in range(i+1, self.nparticles):
                 x_j = np.append(self.particles[j].position,0)
+                r_j = self.particles[j].radius
                 distance = np.sqrt(((x_j - x_i)**2).sum())
-                if  distance <= 2 * self.radius:
+                if  distance <= (r_i + r_j):
                     # collision! - apply textbook eq. 5.14
                     if self.collisions[i,j] == 1:
                         continue
                     self.collisions[i,j] = 1
                     # Define variables for the i-th and j-th particle at the moment of contact
                     v_i = np.append(self.particles[i].velocity, 0)
-                    r_i = self.particles[i].radius
                     omega_i = np.array([0, 0, self.particles[i].omega])
-                    m_i = 1 # Leaving the possibility to add mass to the particles
+                    m_i = self.particles[i].mass
 
                     v_j = np.append(self.particles[j].velocity, 0)
-                    r_j = self.particles[j].radius
                     omega_j = np.array([0, 0, self.particles[j].omega])
-                    m_j = 1 # Leaving the possibility to add mass to the particles
+                    m_j = self.particles[j].mass
 
                     n = (x_j - x_i) / distance # unit vector between the i-th and j-th particle at the moment of contact
                     G0 = v_i - v_j # relative velocity at the moment of contact
@@ -315,7 +338,7 @@ class sim_particles():
             ax[i].set_ylabel('Count')
         fig.tight_layout()
 
-    def update_to_pyglet(self, dt):
+    def simulate_to_pyglet(self, dt):
         self.move_particles(dt)
         self.update_pyglet()
         self.wall_collision()
@@ -323,15 +346,14 @@ class sim_particles():
 
 if __name__ == '__main__':
     _window_size = np.array((800, 800)) # window size
-    _nparticles = 40 # number of particles
-    _radius = 20 # radius of the particles
-    _e = 1.0 # coefficient of restitution
-    _f = 0 # coefficient of friction
-    sim = sim_particles(_window_size, _nparticles, _radius, _e, _f)
+    _nparticles = 20 # number of particles
+    _e = 0.8 # coefficient of restitution
+    _f = 0.3 # coefficient of friction
+    sim = sim_particles(_window_size, _nparticles, _e, _f)
 
-    if True:
-        T = 50
-        N = 2000
+    if False:
+        T = 20
+        N = 1000
         sim.simulate(T, N)
         sim.plot_kinetic_energy(T, N)
         sim.plot_mean_free_path(T, N)
@@ -339,7 +361,7 @@ if __name__ == '__main__':
         plt.show()
         stop = True
 
-    if False:
+    if True:
         window = pyglet.window.Window(sim.window_size[0], sim.window_size[1])
         batch = pyglet.graphics.Batch()
 
@@ -348,7 +370,7 @@ if __name__ == '__main__':
             window.clear()
             batch.draw()
 
-        pyglet.clock.schedule_interval(sim.update_to_pyglet, 1/120.0)
+        pyglet.clock.schedule_interval(sim.simulate_to_pyglet, 1/120.0)
 
         sim.make_particles_pyglet(batch)
         
