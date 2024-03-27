@@ -2,8 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pyglet
 
-# Make seed for reproducibility
-np.random.seed(1917)
+
 
 class particle():
     def __init__(self, e = 0.5, f = 0.5, rho = 1, radius = 20, position = np.array((0, 0)), velocity = np.array((0, 0)), angle = 0, omega = 0):
@@ -22,6 +21,12 @@ class particle():
         self.circle = None
         self.circle2 = None
 
+        self.cs = self.f == 0 # use continuous sliding model if f = 0
+
+        self.in_wall_collision = [False, False, False, False]
+
+        self.wall_res_fric = False # If True enable friction and restitution on the walls
+
     def move(self, dt):
         self.position += self.velocity * dt
         self.angle += self.omega * dt
@@ -31,28 +36,101 @@ class particle():
         self.circle.position = self.position[0], self.position[1]
         self.circle2.position = self.position[0] + 0.5 * self.radius * np.cos(self.angle), self.position[1] + 0.5 * self.radius * np.sin(self.angle)
 
-    def wall_collision_old(self, window_size):
-        # handle particle collition with the walls
-        if self.position[0] < self.radius:
-            self.velocity[0] = abs(self.velocity[0])
-        if self.position[0] > window_size[0] - self.radius :
-            self.velocity[0] = -abs(self.velocity[0])
-        if self.position[1] < self.radius:
-            self.velocity[1] = abs(self.velocity[1])
-        if self.position[1] > window_size[1] - self.radius :
-            self.velocity[1] = -abs(self.velocity[1])
-
     def wall_collision(self, window_size):
         # handle particle collition with the walls
-        if self.position[0] < self.radius:
-            self.velocity[0] = abs(self.velocity[0])
-        if self.position[0] > window_size[0] - self.radius :
-            self.velocity[0] = -abs(self.velocity[0])
-        if self.position[1] < self.radius:
-            self.velocity[1] = abs(self.velocity[1])
-        if self.position[1] > window_size[1] - self.radius :
-            self.velocity[1] = -abs(self.velocity[1])
+        west_collision = self.position[0] < self.radius
+        east_collision = self.position[0] > window_size[0] - self.radius
+        south_collision = self.position[1] < self.radius
+        north_collision = self.position[1] > window_size[1] - self.radius
+
+        if self.wall_res_fric:
+            # If True enable friction and restitution on the walls
+            v_x = self.velocity[0]
+            v_y = self.velocity[1]
+            v = np.linalg.norm(self.velocity)
+            omega = self.omega
+
+            if west_collision and not self.in_wall_collision[0]:
+                self.in_wall_collision[0] = True
+                v_x_1 = - self.e * v_x
+                if self.cs or (- 2 / (7 * self.f * (self.e + 1)) < v_x / v and v_x / v < 0):
+                    v_y_1 = np.sign(v_y) * (abs(v_y) - abs(self.f * (self.e + 1) * v_x))
+                    omega_1 =  omega + np.sign(v_y) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_x)
+                elif - 2 / (7 * self.f * (self.e + 1)) > v_x / v:
+                    v_y_1 =  5/7 * (v_y + 2 * self.radius * self.omega / 5 )
+                    omega_1 = v_y_1 / self.radius
+
+                else:
+                    msg = 'Error in west wall collision'
+                    raise ValueError(msg)
+                
+                self.velocity = np.array([v_x_1, v_y_1])
+                self.omega = omega_1
         
+            if south_collision and not self.in_wall_collision[2]:
+                self.in_wall_collision[2] = True
+                v_y_1 = - self.e * v_y
+                if  self.cs or (- 2 / (7 * self.f * (self.e + 1)) < v_y / v and v_y / v < 0):
+                    v_x_1 = np.sign(v_x) * (abs(v_x) - abs(self.f * (self.e + 1) * v_y))
+                    omega_1 =  omega - np.sign(v_x) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_y)
+                elif - 2 / (7 * self.f * (self.e + 1)) > v_y / v:
+                    v_x_1 =  5/7 * (v_x - 2 * self.radius * self.omega / 5 )
+                    omega_1 = - v_x_1 / self.radius
+                else:
+                    msg = 'Error in south wall collision'
+                    raise ValueError(msg)
+                
+                self.velocity = np.array([v_x_1, v_y_1])
+                self.omega = omega_1
+
+            if east_collision and not self.in_wall_collision[1]:
+                self.in_wall_collision[1] = True
+                v_x_1 = - self.e * v_x
+                if self.cs or (2 / (7 * self.f * (self.e + 1)) > v_x / v and v_x / v > 0):
+                    v_y_1 = np.sign(v_y) * (abs(v_y) - abs(self.f * (self.e + 1) * v_x))
+                    omega_1 =  omega - np.sign(v_y) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_x)
+                elif 2 / (7 * self.f * (self.e + 1)) < v_x / v:
+                    v_y_1 =  5/7 * (v_y - 2 * self.radius * self.omega / 5 )
+                    omega_1 = - v_y_1 / self.radius
+                else:
+                    msg = 'Error in east wall collision'
+                    raise ValueError(msg)
+                
+                self.velocity = np.array([v_x_1, v_y_1])
+                self.omega = omega_1
+
+            if north_collision and not self.in_wall_collision[3]:
+                self.in_wall_collision[3] = True
+                v_y_1 = - self.e * v_y
+                if self.cs or (2 / (7 * self.f * (self.e + 1)) > v_y / v and v_y / v > 0):
+                    v_x_1 = np.sign(v_x) * (abs(v_x) - abs(self.f * (self.e + 1) * v_y))
+                    omega_1 =  omega + np.sign(v_x) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_y)
+
+                elif 2 / (7 * self.f * (self.e + 1)) < v_y / v:
+                    v_x_1 =  5/7 * (v_x + 2 * self.radius * self.omega / 5 )
+                    omega_1 =  v_x_1 / self.radius
+                else:
+                    msg = 'Error in north wall collision'
+                    raise ValueError(msg)
+                
+                self.velocity = np.array([v_x_1, v_y_1])
+                self.omega = omega_1
+
+            self.in_wall_collision[0] = west_collision
+            self.in_wall_collision[1] = east_collision
+            self.in_wall_collision[2] = south_collision
+            self.in_wall_collision[3] = north_collision
+            
+        else:
+            # Else assume no friction and restitution on the walls
+            if west_collision:
+                self.velocity[0] = abs(self.velocity[0])
+            if east_collision:
+                self.velocity[0] = -abs(self.velocity[0])
+            if south_collision:
+                self.velocity[1] = abs(self.velocity[1])
+            if north_collision:
+                self.velocity[1] = -abs(self.velocity[1])
 
     @property
     def rotational_kinetic_energy(self):
@@ -80,6 +158,8 @@ class sim_particles():
         self.max_rho = 1
         self.max_radius = 20
 
+        self.rho_c = 1
+
         self.color1 = (20, 20, 250)
         self.color2 = (200, 200, 250)
         self.particles: list[particle] = []
@@ -92,11 +172,16 @@ class sim_particles():
         self.kinetic_energy = []
         self.velocity = []
         self.mean_free_path = []
-        self.force_on_wall = np.zeros(4)
+
+        self.cs = self.f == 0 # use continuous sliding model if f = 0
+
+        self.particle_res_fric = False # If True enable friction and restitution on the particles
 
         self.make_particles()
              
     def make_particles(self, random_particles = False):
+        # Make seed for reproducibility
+        np.random.seed(1964)
         if random_particles:
             rho = np.random.rand(self.nparticles) * self.max_rho
             radius = np.random.rand(self.nparticles) * self.max_radius
@@ -160,6 +245,7 @@ class sim_particles():
                     if self.collisions[i,j] == 1:
                         continue
                     self.collisions[i,j] = 1
+                    
                     # Define variables for the i-th and j-th particle at the moment of contact
                     v_i = np.append(self.particles[i].velocity, 0)
                     omega_i = np.array([0, 0, self.particles[i].omega])
@@ -171,38 +257,38 @@ class sim_particles():
 
                     n = (x_j - x_i) / distance # unit vector between the i-th and j-th particle at the moment of contact
                     G0 = v_i - v_j # relative velocity at the moment of contact
-                    G0_c = G0 + np.cross(r_i*omega_i, n) + np.cross(r_j*omega_j, n) # relative velocity at the moment of contact in the contact frame
-                    G0_ct = G0_c - np.dot(G0_c, n) * n # relative velocity at the moment of contact in the tangential frame
-
-                    # Get the unit vector in the tangential frame from n
-                    t_test = np.array([-n[1], n[0], 0])
-                    t = G0_ct / np.linalg.norm(G0_ct) # unit vector in the tangential frame
-                    cs = False
-                    if self.f == 0:
-                        cs = True
-                    if cs or np.dot(n, G0)/np.linalg.norm(G0_ct) < (2/7)*1/(self.f * (1 + self.e)): 
-                        # Continuous sliding
-                        v_i_1 = v_i - (n + self.f * t) * np.dot(n, G0) * (1 + self.e) * m_j / (m_i + m_j)
-                        v_j_1 = v_j + (n + self.f * t) * np.dot(n, G0) * (1 + self.e) * m_i / (m_i + m_j)
-
-                        omega_i_1 = omega_i - 5/(2*r_i) * np.dot(n, G0) * np.cross(n, t) * self.f * (1 + self.e) * m_j / (m_i + m_j)
-                        omega_j_1 = omega_j - 5/(2*r_j) * np.dot(n, G0) * np.cross(n, t) * self.f * (1 + self.e) * m_i / (m_i + m_j)
-
-                    else:
-                        v_i_1 = v_i - ((1 + self.e) * np.dot(n, G0) * n + 2/7 * np.linalg.norm(G0_ct) * t) * m_j / (m_i + m_j)
-                        v_j_1 = v_j + ((1 + self.e) * np.dot(n, G0) * n + 2/7 * np.linalg.norm(G0_ct) * t) * m_i / (m_i + m_j)
-
-                        omega_i_1 = omega_i - 5/(7*r_i) * np.linalg.norm(G0_ct) * np.cross(n, t) * m_j / (m_i + m_j)
-                        omega_j_1 = omega_j - 5/(7*r_j) * np.linalg.norm(G0_ct) * np.cross(n, t) * m_i / (m_i + m_j) 
-
-                    self.particles[i].velocity = v_i_1[:2]
-                    self.particles[j].velocity = v_j_1[:2]
-                    self.particles[i].omega = omega_i_1[2]
-                    self.particles[j].omega = omega_j_1[2]
                     
-                    # dvel = n * np.dot(n, G0)
-                    # self.particles[i].velocity -= dvel
-                    # self.particles[j].velocity += dvel
+                    if self.particle_res_fric:
+                        G0_c = G0 + np.cross(r_i*omega_i, n) + np.cross(r_j*omega_j, n) # relative velocity at the moment of contact in the contact frame
+                        G0_ct = G0_c - np.dot(G0_c, n) * n # relative velocity at the moment of contact in the tangential frame
+
+                        # Get the unit vector in the tangential frame from n
+                        t_test = np.array([-n[1], n[0], 0])
+                        t = G0_ct / np.linalg.norm(G0_ct) # unit vector in the tangential frame
+                        if self.cs or np.dot(n, G0)/np.linalg.norm(G0_ct) < (2/7)*1/(self.f * (1 + self.e)): 
+                            # Continuous sliding
+                            v_i_1 = v_i - (n + self.f * t) * np.dot(n, G0) * (1 + self.e) * m_j / (m_i + m_j)
+                            v_j_1 = v_j + (n + self.f * t) * np.dot(n, G0) * (1 + self.e) * m_i / (m_i + m_j)
+
+                            omega_i_1 = omega_i - 5/(2*r_i) * np.dot(n, G0) * np.cross(n, t) * self.f * (1 + self.e) * m_j / (m_i + m_j)
+                            omega_j_1 = omega_j - 5/(2*r_j) * np.dot(n, G0) * np.cross(n, t) * self.f * (1 + self.e) * m_i / (m_i + m_j)
+
+                        else:
+                            v_i_1 = v_i - ((1 + self.e) * np.dot(n, G0) * n + 2/7 * np.linalg.norm(G0_ct) * t) * m_j / (m_i + m_j)
+                            v_j_1 = v_j + ((1 + self.e) * np.dot(n, G0) * n + 2/7 * np.linalg.norm(G0_ct) * t) * m_i / (m_i + m_j)
+
+                            omega_i_1 = omega_i - 5/(7*r_i) * np.linalg.norm(G0_ct) * np.cross(n, t) * m_j / (m_i + m_j)
+                            omega_j_1 = omega_j - 5/(7*r_j) * np.linalg.norm(G0_ct) * np.cross(n, t) * m_i / (m_i + m_j) 
+
+                        self.particles[i].velocity = v_i_1[:2]
+                        self.particles[j].velocity = v_j_1[:2]
+                        self.particles[i].omega = omega_i_1[2]
+                        self.particles[j].omega = omega_j_1[2]
+                    
+                    else:
+                        dvel = n * np.dot(n, G0)
+                        self.particles[i].velocity -= dvel[:2]
+                        self.particles[j].velocity += dvel[:2]
 
                     stop = True
                 else:
@@ -345,23 +431,24 @@ class sim_particles():
         self.particle_collision()
 
 if __name__ == '__main__':
-    _window_size = np.array((800, 800)) # window size
+    _window_size = np.array((750, 750)) # window size
     _nparticles = 20 # number of particles
-    _e = 0.8 # coefficient of restitution
-    _f = 0.3 # coefficient of friction
+    _e = 1.0 # coefficient of restitution
+    _f = 0.2 # coefficient of friction
     sim = sim_particles(_window_size, _nparticles, _e, _f)
 
-    if False:
+    # if False:
+    if True:
         T = 20
-        N = 1000
+        N = 500
         sim.simulate(T, N)
         sim.plot_kinetic_energy(T, N)
-        sim.plot_mean_free_path(T, N)
-        sim.plot_velocity_distribution(T, N, [0, N-1])
+        # sim.plot_mean_free_path(T, N)
+        # sim.plot_velocity_distribution(T, N, [0, N-1])
         plt.show()
         stop = True
 
-    if True:
+    else:
         window = pyglet.window.Window(sim.window_size[0], sim.window_size[1])
         batch = pyglet.graphics.Batch()
 
