@@ -85,22 +85,8 @@ class particle():
                 
                 self.velocity = np.array([v_x_1, v_y_1])
                 self.omega = omega_1
-        
-            if south_collision and not self.in_wall_collision[2]:
-                self.in_wall_collision[2] = True
-                v_y_1 = - self.e * v_y
-                if  self.cs or (- 2 / (7 * self.f * (self.e + 1)) < v_y / v and v_y / v < 0):
-                    v_x_1 = np.sign(v_x) * (abs(v_x) - abs(self.f * (self.e + 1) * v_y))
-                    omega_1 =  omega - np.sign(v_x) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_y)
-                elif - 2 / (7 * self.f * (self.e + 1)) > v_y / v:
-                    v_x_1 =  5/7 * (v_x - 2 * self.radius * self.omega / 5 )
-                    omega_1 = - v_x_1 / self.radius
-                else:
-                    msg = 'Error in south wall collision'
-                    raise ValueError(msg)
-                
-                self.velocity = np.array([v_x_1, v_y_1])
-                self.omega = omega_1
+
+                # self.velocity[0] = abs(self.velocity[0])
 
             if east_collision and not self.in_wall_collision[1]:
                 self.in_wall_collision[1] = True
@@ -118,6 +104,26 @@ class particle():
                 self.velocity = np.array([v_x_1, v_y_1])
                 self.omega = omega_1
 
+                # self.velocity[0] = -abs(self.velocity[0])
+
+            if south_collision and not self.in_wall_collision[2]:
+                self.in_wall_collision[2] = True
+                v_y_1 = - self.e * v_y
+                if  self.cs or (- 2 / (7 * self.f * (self.e + 1)) < v_y / v and v_y / v < 0):
+                    v_x_1 = np.sign(v_x) * (abs(v_x) - abs(self.f * (self.e + 1) * v_y))
+                    omega_1 =  omega - np.sign(v_x) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_y)
+                elif - 2 / (7 * self.f * (self.e + 1)) > v_y / v:
+                    v_x_1 =  5/7 * (v_x - 2 * self.radius * self.omega / 5 )
+                    omega_1 = - v_x_1 / self.radius
+                else:
+                    msg = 'Error in south wall collision'
+                    raise ValueError(msg)
+                
+                self.velocity = np.array([v_x_1, v_y_1])
+                self.omega = omega_1
+
+                # self.velocity[1] = abs(self.velocity[1])
+
             if north_collision and not self.in_wall_collision[3]:
                 self.in_wall_collision[3] = True
                 v_y_1 = - self.e * v_y
@@ -134,6 +140,8 @@ class particle():
                 
                 self.velocity = np.array([v_x_1, v_y_1])
                 self.omega = omega_1
+
+                # self.velocity[1] = -abs(self.velocity[1])
 
             self.in_wall_collision[0] = west_collision
             self.in_wall_collision[1] = east_collision
@@ -202,7 +210,7 @@ class sim_particles():
              
     def make_particles(self):
         # Make seed for reproducibility
-        np.random.seed(1964)
+        np.random.seed(1999)
         if self.random_radius:
             radius = np.random.rand(self.nparticles) * self.max_radius
         else:
@@ -390,9 +398,42 @@ class sim_particles():
         for i in range(self.nparticles):
             self.tau_pw_matrix[i] = self.time_before_collision_wall(self.particles[i])
 
-    @property
-    def dT_before_collision(self):
-        return np.nanmin([np.nanmin(self.tau_pp_matrix), np.nanmin(self.tau_pw_matrix)])
+    def update_time_before_collision_matrix(self, dt, particles, collision_type):
+        i, j = particles
+        self.tau_pp_matrix[j,i] -= dt
+        self.tau_pw_matrix[i] -= dt
+
+        # Update for particle i
+        for k in range(self.nparticles):
+            if k != i:
+                tau = self.time_before_collision_particle(self.particles[i], self.particles[k])
+                self.tau_pp_matrix[k,i] = tau
+        
+        self.tau_pw_matrix[i] = self.time_before_collision_wall(self.particles[i])
+
+        # Update for particle j
+        for k in range(self.nparticles):
+            if k != j:
+                tau = self.time_before_collision_particle(self.particles[j], self.particles[k])
+                self.tau_pp_matrix[k,j] = tau
+        
+        self.tau_pw_matrix[j] = self.time_before_collision_wall(self.particles[j])
+
+
+    def dt_before_collision(self):
+        
+        dt_pp = np.nanmin(self.tau_pp_matrix)
+        dt_pw = np.nanmin(self.tau_pw_matrix)
+
+        # Determine if it is pp or pw collision
+        collision_type = np.nanargmin([dt_pp, dt_pw])
+        
+        if collision_type == 0:
+            i, j = np.unravel_index(np.nanargmin(self.tau_pp_matrix, axis=None), self.tau_pp_matrix.shape)
+            return dt_pp + 1e-10, (i, j), collision_type
+        
+        i = np.nanargmin(self.tau_pw_matrix)
+        return dt_pw + 1e-10, (i, None), collision_type
 
     def get_total_kinetic_energy(self):
         return np.sum([particle.kinetic_energy for particle in self.particles])
@@ -439,11 +480,11 @@ class sim_particles():
         self.t = []
         while t < T:
             print(f'Simulation time {t:.2f} of {T}')
-            dt = self.dT_before_collision + 1e-10
+            dt, particles, collision_type = self.dt_before_collision()
             self.move_particles(dt)
             self.wall_collision()
             self.particle_collision()
-            self.init_time_before_collision_matrix()
+            self.update_time_before_collision_matrix(dt, particles, collision_type)
             self.update_stats()
             self.t.append(t)
             t += dt
@@ -489,12 +530,12 @@ if __name__ == '__main__':
     _window_size = np.array((750, 750)) # window size
     _nparticles = 20 # number of particles
     _e = 1.0 # coefficient of restitution
-    _f = 0 # coefficient of friction
+    _f = 0.2 # coefficient of friction
     _random_particles = [False, False] # random radius and random rho
     sim = sim_particles(_window_size, _nparticles, _e, _f, _random_particles)
 
-    if False:
-    # if True:
+    # if False:
+    if True:
         T = 20
         N = 500
         # sim.simulate(T, N)
@@ -514,8 +555,8 @@ if __name__ == '__main__':
             window.clear()
             batch.draw()
 
-        # pyglet.clock.schedule_interval(sim.simulate_to_pyglet, 1/120.0)
-        pyglet.clock.schedule_interval(sim.simulate_to_pyglet_non_fixed_dt, 1/2)
+        pyglet.clock.schedule_interval(sim.simulate_to_pyglet, 1/120.0)
+        # pyglet.clock.schedule_interval(sim.simulate_to_pyglet_non_fixed_dt, 1/2)
 
         sim.make_particles_pyglet(batch)
         
