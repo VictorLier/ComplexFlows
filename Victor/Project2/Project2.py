@@ -265,17 +265,13 @@ class Simulation:
     def run_steps(self, steps: int):
         next_time = 0
         for i in range(steps):
-            next_time = self.field.get_lowest_time()[0]
+            next_time, min_index, min_pair = self.field.get_lowest_time()[0]
             self.field = move(self.field, next_time)
 
 
 if __name__ == "__main__":
 
-    field = FluidField(x = 1000, y = 1000, N = 1000, r = 1, MaxV = 1, MaxRot = 1)
+    field = FluidField(x = 10, y = 10, N = 1, r = 1, MaxV = 1, MaxRot = 1)
     print(field.get_lowest_time())
-
-    print(field.get_lowest_time())
-    # sim = Simulation(total_time=2, field=field)
-    # sim.run_steps(1)
 
     print("Stop")
