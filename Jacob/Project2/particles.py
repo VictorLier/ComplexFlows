@@ -3,6 +3,7 @@
 
 import numpy as np
 from numpy import sqrt, cos, sin, array, zeros
+import matplotlib.pyplot as plt
 import pyglet
 
 #parameters
@@ -83,6 +84,9 @@ def particle_collision(velocity):
                 dvel = n * np.dot(n, G0)
                 velocity[i] -= dvel
                 velocity[j] += dvel
+
+def get_total_kinetic_energy(velocity):
+    return 0.5 * np.sum(velocity**2)
             
 # modify pyglet draw command to draw our particles
 @window.event
@@ -96,18 +100,57 @@ def update(dt):
     wall_collision(velocity)
     particle_collision(velocity)
 
+def plot_kinetic_energy(kinetic_energy, dt):
+    plt.plot(np.arange(0, T, dt), kinetic_energy)
+    plt.xlabel('time (s)')
+    plt.ylabel('kinetic energy (J)')
+
+def plot_velocity_distribution(dt, velocity_lst, n_lst):
+    # n_lst is a list of the time steps to plot in a subfigure
+    n_bins = 20
+    fig, axs = plt.subplots(1, len(n_lst), figsize=(15, 5))
+    for i, n in enumerate(n_lst):
+        axs[i].hist(np.linalg.norm(velocity_lst[n], axis=1), bins=20)
+        axs[i].set_title(f't = {n * dt:.2f} s')
+        axs[i].set_xlabel('velocity (m/s)')
+        axs[i].set_ylabel('count')    
+
+
+def do_simulation(T, N):
+    make_particles(position, velocity, omega, circles)
+    # simulate the particle system for T seconds using N time steps
+    dt = T / N
+    kinetic_energy = np.zeros(N)
+    position_lst = np.zeros((N, nparticles, 2))
+    velocity_lst = np.zeros((N, nparticles, 2))
+    for i in range(N):
+        update(dt)
+        kinetic_energy[i] = get_total_kinetic_energy(velocity)
+        position_lst[i] = position
+        velocity_lst[i] = velocity
+
+    plot_kinetic_energy(kinetic_energy, dt)
+    plot_velocity_distribution(dt, velocity_lst, [0, N-1])
+
 # run the following if this is the main script
 if __name__ == "__main__":
 
-    # Update the game 120 times per second
-    pyglet.clock.schedule_interval(update, 1 / 120.0)
+    if True:
+        # Update the game 120 times per second
+        pyglet.clock.schedule_interval(update, 1 / (120.0))
+        
+        # Create particles with random position and velocity
+        make_particles(position, velocity, omega, circles)
+
+        # Tell pyglet to do its thing
+        pyglet.app.run()
+
+        del window
+        del batch
     
-    # Create particles with random position and velocity
-    make_particles(position, velocity, omega, circles)
-
-    # Tell pyglet to do its thing
-    pyglet.app.run()
-
-    del window
-    del batch
- 
+    if False:
+        T = 10
+        N = 1000
+        do_simulation(T, N)
+    
+    plt.show()
