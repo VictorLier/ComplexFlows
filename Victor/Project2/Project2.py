@@ -5,6 +5,7 @@ def grid(min_spacing: float, width: float, height: float, number: int) -> np.nda
     Creates a grid of points with a minimum spacing between them
     min_spacing: minimum spacing between the points
     width: width of the grid
+    height: height of the grid
     number: number of points
     '''
     # Reduced grid size
@@ -209,6 +210,7 @@ class FluidField:
         self.particles = np.empty(self.N, dtype=Particle)
         
         # Velocity and rotation is randomized
+        np.random.seed(0) # For reproducibility
         vx = np.random.rand(self.N) * self.MaxV
         vy = np.random.rand(self.N) * self.MaxV
         rot = np.random.rand(self.N) * self.MaxRot
