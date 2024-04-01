@@ -43,9 +43,9 @@ def grid(min_spacing: float, width: float, height: float, number: int) -> np.nda
 
 def time_map(N: int) -> np.ndarray:
     '''
-    Creates a map of the time vector and the time vector
+    Creates a map from matrix to vector, vector to matrix and the time vector
     N: number of particles
-    out: t_map, t_vector
+    out: mat_to_vec, vec_to_mat, t_vector
     '''
     # Expand matrix size to include walls
     n = N + 4
@@ -64,16 +64,17 @@ def time_map(N: int) -> np.ndarray:
     time_vector_wall = np.append(time_vector, [-99999, -99999, -99999, -99999, -99999, -99999])
 
     # Create the time map
-    t_map = np.full((n, n), -99999)
+    mat_to_vec = np.full((n, n), -99999)
 
     # Finds the indices of the upper triangle of the matrix
-    inds = np.triu_indices_from(t_map, k=1)
+    inds = np.triu_indices_from(mat_to_vec, k=1)
+    vec_to_mat = np.array(inds)
 
     # Fills the upper and lower triangle with the time vector
-    t_map[inds] = time_vector_wall
-    t_map.T[inds] = time_vector_wall
+    mat_to_vec[inds] = time_vector_wall
+    mat_to_vec.T[inds] = time_vector_wall
 
-    return t_map, t_vector
+    return mat_to_vec, vec_to_mat, t_vector
 
 
 def time_to_collision(Particles, time_map, time_vector, x, y):
@@ -217,10 +218,10 @@ class FluidField:
             self.particles[i] = Particle(xg[i], yg[i], vx[i], vy[i], rot[i], self.r)
 
         # Create the time map and vector
-        self.time_map, self.time_vector = time_map(self.N)
+        self.mat_to_vec, self. vec_to_mat, self.time_vector = time_map(self.N)
 
         # Find the time to collision
-        self.time_vector = time_to_collision(self.particles, self.time_map, self.time_vector, self.x, self.y)
+        self.time_vector = time_to_collision(self.particles, self.mat_to_vec, self.time_vector, self.x, self.y)
 
     def ke_total(self):
         '''
@@ -242,23 +243,14 @@ class FluidField:
     
     def get_lowest_time(self):
         '''
-        Returns the lowest time and index of the time vector
+        Returns the lowest time, index of the time vector and the pair of particles
         out: min_value, min_index
         '''
         min_value = np.nanmin(self.time_vector)
         min_index = np.nanargmin(self.time_vector)
+        min_pair = self.vec_to_mat[:, min_index]
 
-        return min_value, min_index
-
-    def get_next_pair(self):
-        '''
-        Returns the next pair of particles to collide
-        out: index
-        '''
-        min_index = self.get_lowest_time()[1]
-        index = np.where(self.time_map == min_index)[0]
-
-        return index
+        return min_value, min_index, min_pair
 
 class Simulation:
     def __init__(self, total_time: float, field: FluidField):
@@ -273,15 +265,13 @@ class Simulation:
     def run_steps(self, steps: int):
         next_time = 0
         for i in range(steps):
-            next_time = self.field.get_lowest_time()[0]
+            next_time, min_index, min_pair = self.field.get_lowest_time()[0]
             self.field = move(self.field, next_time)
 
 
 if __name__ == "__main__":
 
-    field = FluidField(x = 10, y = 10, N = 4, r = 1, MaxV = 1, MaxRot = 1)
-
-    sim = Simulation(total_time=2, field=field)
-    sim.run_steps(1)
+    field = FluidField(x = 10, y = 10, N = 1, r = 1, MaxV = 1, MaxRot = 1)
+    print(field.get_lowest_time())
 
     print("Stop")
