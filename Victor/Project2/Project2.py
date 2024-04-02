@@ -1,4 +1,6 @@
 import numpy as np
+import pyglet
+import matplotlib.pyplot as plt
 
 def grid(min_spacing: float, width: float, height: float, number: int) -> np.ndarray:
     '''
@@ -10,8 +12,8 @@ def grid(min_spacing: float, width: float, height: float, number: int) -> np.nda
     '''
     # Reduced grid size
     x_start = min_spacing
-    x_length = width - 2 * min_spacing
-    y_length = height - 2 * min_spacing
+    x_length = width - 3 * min_spacing
+    y_length = height - 3 * min_spacing
 
     # Number of columns and rows that fits
     columns = int(np.ceil(x_length / min_spacing))
@@ -41,130 +43,16 @@ def grid(min_spacing: float, width: float, height: float, number: int) -> np.nda
 
     return xg, yg
 
-
-def time_map(N: int) -> np.ndarray:
-    '''
-    Creates a map from matrix to vector, vector to matrix and the time vector
-    N: number of particles
-    out: mat_to_vec, vec_to_mat, t_vector
-    '''
-    # Expand matrix size to include walls
-    n = N + 4
-
-    # Finde the number of elements in the time vector
-    number = 0
-    for i in range(N):
-        number += n-(i+1)
-    
-    # Create the empty time vector
-    t_vector = np.zeros(number)
-
-    # Create the time vector
-    time_vector = np.arange(number)
-    # Add the wall elements
-    time_vector_wall = np.append(time_vector, [-99999, -99999, -99999, -99999, -99999, -99999])
-
-    # Create the time map
-    mat_to_vec = np.full((n, n), -99999)
-
-    # Finds the indices of the upper triangle of the matrix
-    inds = np.triu_indices_from(mat_to_vec, k=1)
-    vec_to_mat = np.array(inds)
-
-    # Fills the upper and lower triangle with the time vector
-    mat_to_vec[inds] = time_vector_wall
-    mat_to_vec.T[inds] = time_vector_wall
-
-    return mat_to_vec, vec_to_mat, t_vector
-
-
-def time_to_collision(Particles, time_map, time_vector, x, y):
-    '''
-    Finds the time to collision for each particle
-    Particles: array of particles
-    time_map: map of the time vector
-    time_vector: time vector
-    x: domain x
-    y: domain y
-    '''
-    # Find the time to the other particle
-    for i in range(len(Particles)):
-        for j in range(len(Particles)):
-            if i != j:
-                x1 = Particles[i].x
-                y1 = Particles[i].y
-                x2 = Particles[j].x
-                y2 = Particles[j].y
-                r1 = Particles[i].r
-                r2 = r1
-                vx1 = Particles[i].vx
-                vy1 = Particles[i].vy
-                vx2 = Particles[j].vx
-                vy2 = Particles[j].vy
-
-                # Find the time to the other particle
-                t = (-vx1*x1 + vx1*x2 + vx2*x1 - vx2*x2 - vy1*y1 + vy1*y2 + vy2*y1 - vy2*y2 - np.sqrt(-vx1**2*y1**2 + 2*vx1**2*y1*y2 - vx1**2*y2**2 + vx1**2*(r1 + r2)**2 + 2*vx1*vx2*y1**2 - 4*vx1*vx2*y1*y2 + 2*vx1*vx2*y2**2 - 2*vx1*vx2*(r1 + r2)**2 + 2*vx1*vy1*x1*y1 - 2*vx1*vy1*x1*y2 - 2*vx1*vy1*x2*y1 + 2*vx1*vy1*x2*y2 - 2*vx1*vy2*x1*y1 + 2*vx1*vy2*x1*y2 + 2*vx1*vy2*x2*y1 - 2*vx1*vy2*x2*y2 - vx2**2*y1**2 + 2*vx2**2*y1*y2 - vx2**2*y2**2 + vx2**2*(r1 + r2)**2 - 2*vx2*vy1*x1*y1 + 2*vx2*vy1*x1*y2 + 2*vx2*vy1*x2*y1 - 2*vx2*vy1*x2*y2 + 2*vx2*vy2*x1*y1 - 2*vx2*vy2*x1*y2 - 2*vx2*vy2*x2*y1 + 2*vx2*vy2*x2*y2 - vy1**2*x1**2 + 2*vy1**2*x1*x2 - vy1**2*x2**2 + vy1**2*(r1 + r2)**2 + 2*vy1*vy2*x1**2 - 4*vy1*vy2*x1*x2 + 2*vy1*vy2*x2**2 - 2*vy1*vy2*(r1 + r2)**2 - vy2**2*x1**2 + 2*vy2**2*x1*x2 - vy2**2*x2**2 + vy2**2*(r1 + r2)**2))/(vx1**2 - 2*vx1*vx2 + vx2**2 + vy1**2 - 2*vy1*vy2 + vy2**2)
-                if t < 0:
-                    t = np.nan
-                time_vector[time_map[i, j]] = t
-
-    # Find the time to the walls
-    for i in range(len(Particles)):
-        t_south = (Particles[i].r - Particles[i].y) / Particles[i].vy
-        if t_south < 0:
-            t_south = np.nan
-        time_vector[time_map[i, -4]] = t_south
-
-        t_west = (Particles[i].r - Particles[i].x) / Particles[i].vx
-        if t_west < 0:
-            t_west = np.nan
-        time_vector[time_map[i, -3]] = t_west
-
-        t_north = (y - Particles[i].r - Particles[i].y) / Particles[i].vy
-        if t_north < 0:
-            t_north = np.nan
-        time_vector[time_map[i, -2]] = t_north
-
-        t_east = (x - Particles[i].r - Particles[i].x) / Particles[i].vx
-        if t_east < 0:
-            t_east = np.nan
-        time_vector[time_map[i, -1]] = t_east
-
-    return time_vector
-
-
-def move(fluidfield, time: float):
-    '''
-    Moves the particles in the fluid field
-    fluidfield: fluid field
-    time: time to move
-    out: fluidfield
-    '''
-    for i in range(fluidfield.N):
-        fluidfield.particles[i].x += fluidfield.particles[i].vx * time
-        fluidfield.particles[i].y += fluidfield.particles[i].vy * time
-
-    return fluidfield
-
-
-def collision(particle1, particle2):
-    n = np.array([particle2.x - particle1.x, particle2.y - particle1.y]) / particle1.r
-    G0 = np.array([particle1.vx - particle2.vx, particle1.vy - particle2.vy])
-    dvel = n * np.dot(n, G0)
-    particle1.vx -= dvel[0]
-    particle1.vy -= dvel[1]
-    particle2.vx += dvel[0]
-    particle2.vy += dvel[1]
-
-
 class Particle:
-    def __init__(self, x: float, y: float, vx: float, vy: float, Rot: float, r: float):
+    def __init__(self, x: float, y: float, vx: float, vy: float, Rot: float, r: float, cd: float = 0.1, rho: float = 1):
         '''
-        Creates a particle with the following parameters: x, y, vx, vy, Rot, r
+        Creates a particle with the following parameters: x, y, vx, vy, Rot, r, cd, rho
         x, y: position
         vx, vy: velocity
         Rot: rotation
         r: radius
+        cd: drag coefficient
+        rho: density
         '''
         self.x = x
         self.y = y
@@ -172,6 +60,17 @@ class Particle:
         self.vy = vy
         self.Rot = Rot
         self.r = r
+        self.cd = cd
+        self.rho = rho
+        self.circle = None
+        self.circle2 = None
+        self.angle = 0
+
+        self.m = np.pi * self.r**2 * self.rho
+
+        self.D = r*2
+
+        self.I = 2/5 * self.m * self.r**2
 
     def speed(self):
         '''
@@ -179,51 +78,368 @@ class Particle:
         '''
         return np.sqrt(self.vx**2 + self.vy**2)
     
+    def FD(self):
+        '''
+        Returns the drag force of the particle in the
+        '''
+        FD = 0.5 * self.speed()**2 * self.cd * self.D
+        return FD
+    
+    def AD(self):
+        '''
+        Returns the drag acceleration of the particle in the x and y direction
+        '''
+
+        ADx = self.FD() / self.m * self.vx / self.speed()
+        ADy = self.FD() / self.m * self.vy / self.speed()
+
+        return ADx, ADy
+    
+    def dragSpeed(self, dt: float):
+        '''
+        Updates the speed of the particle with the drag force
+        '''
+        self.vx -= self.AD()[0]  * dt
+        self.vy -= self.AD()[1]  * dt
+
+    def Tke(self):
+        '''
+        Returns the translational kinetic energy of the particle
+        '''
+        return 0.5 * self.m * self.speed()**2
+    
+    def Rke(self):
+        '''
+        Returns the rotational kinetic energy of the particle
+        '''
+        return 0.5 * self.I * self.Rot**2
+    
     def ke(self):
         '''
         Returns the kinetic energy of the particle
         '''
-        return 0.5 * self.speed()**2
+        return self.Tke() + self.Rke()
+    
+    def move(self, dt: float):
+        '''
+        Moves the particle
+        dt: time to move
+        '''
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.angle += self.Rot * dt
+    
+    def update_pyglet(self):
+        '''
+        Updates the pyglet circle
+        '''
+        self.circle.position = self.x, self.y
+        self.circle2.position = self.x + 0.5 * self.r * np.cos(self.angle), self.y + 0.5 * self.r * np.sin(self.angle)
 
 
 class FluidField:
-    def __init__(self, x: float, y: float, N:int,r: float, MaxV: float, MaxRot: float):
+    def __init__(self, x: float, y: float, N:int, Maxr: float, MaxV: float, MaxRot: float, e: float = 0.99, f: float = 0.4, TimeJump: bool = False, FricRes: bool = False):
         '''
-        Defines the fluid field with the parameters: x, y, N, r
+        Defines the fluid field with the parameters: x, y, N, r, MaxV, MaxRot, e, f
         x, y: dimensions of the field
         N: number of particles
         r: radius of the particles
         MaxV: maximum velocity of the particles
         MaxRot: maximum rotation of the particles
+        e: restitution coefficient
+        f: friction coefficient
+        TimeJump: True if the time jumps to next collision
+        FricRes: True if friction and restitution is used
         '''
         self.x = x
         self.y = y
         self.N = N
-        self.r = r
+        self.Maxr = Maxr
         self.MaxV = MaxV
         self.MaxRot = MaxRot
+        self.e = e
+        self.f = f
+        self.TimeJump = TimeJump
+        self.FricRes = FricRes
+
 
         # Create the particle starting point
-        xg, yg = grid(3 * r, self.x, self.y, self.N)
+        xg, yg = grid(3 * self.Maxr, self.x, self.y, self.N)
 
         # Create the empty particles list
         self.particles = np.empty(self.N, dtype=Particle)
         
-        # Velocity and rotation is randomized
-        np.random.seed(0) # For reproducibility
-        vx = np.random.rand(self.N) * self.MaxV
-        vy = np.random.rand(self.N) * self.MaxV
-        rot = np.random.rand(self.N) * self.MaxRot
+        if True:
+            # Velocity and rotation is randomized
+            np.random.seed(0) # For reproducibility
+            vx = np.random.rand(self.N) * self.MaxV
+            vy = np.random.rand(self.N) * self.MaxV
+            if self.FricRes:
+                rot = np.random.rand(self.N) * self.MaxRot
+            else:
+                rot = np.random.rand(self.N) * 0
+            r = np.random.rand(self.N) * self.Maxr
+
+        else:
+            # Velocity and rotation is constant
+            vx = np.ones(self.N) * self.MaxV
+            vy = np.ones(self.N) * self.MaxV
+            if self.FricRes:
+                rot = np.ones(self.N) * self.MaxRot
+            else:
+                rot = np.ones(self.N) * 0
+            r = np.ones(self.N) * self.Maxr
 
         # Create the particles
         for i in range(self.N):
-            self.particles[i] = Particle(xg[i], yg[i], vx[i], vy[i], rot[i], self.r)
+            self.particles[i] = Particle(xg[i], yg[i], vx[i], vy[i], rot[i], r[i])
 
-        # Create the time map and vector
-        self.mat_to_vec, self. vec_to_mat, self.time_vector = time_map(self.N)
+        # Initialize the time matrix
+        if self.TimeJump:
+            self.Time = np.full((self.N + 4, self.N + 4), np.nan)
 
-        # Find the time to collision
-        self.time_vector = time_to_collision(self.particles, self.mat_to_vec, self.time_vector, self.x, self.y)
+            # Finds the times
+            for i in range(self.N):
+                for j in range(self.N):
+                    if i != j:
+                        x1 = self.particles[i].x
+                        y1 = self.particles[i].y
+                        x2 = self.particles[j].x
+                        y2 = self.particles[j].y
+                        r1 = self.particles[i].r
+                        r2 = r1
+                        vx1 = self.particles[i].vx
+                        vy1 = self.particles[i].vy
+                        vx2 = self.particles[j].vx
+                        vy2 = self.particles[j].vy
+
+                        # Find the time to the other particle
+                        t = (-vx1*x1 + vx1*x2 + vx2*x1 - vx2*x2 - vy1*y1 + vy1*y2 + vy2*y1 - vy2*y2 - np.sqrt(-vx1**2*y1**2 + 2*vx1**2*y1*y2 - vx1**2*y2**2 + vx1**2*(r1 + r2)**2 + 2*vx1*vx2*y1**2 - 4*vx1*vx2*y1*y2 + 2*vx1*vx2*y2**2 - 2*vx1*vx2*(r1 + r2)**2 + 2*vx1*vy1*x1*y1 - 2*vx1*vy1*x1*y2 - 2*vx1*vy1*x2*y1 + 2*vx1*vy1*x2*y2 - 2*vx1*vy2*x1*y1 + 2*vx1*vy2*x1*y2 + 2*vx1*vy2*x2*y1 - 2*vx1*vy2*x2*y2 - vx2**2*y1**2 + 2*vx2**2*y1*y2 - vx2**2*y2**2 + vx2**2*(r1 + r2)**2 - 2*vx2*vy1*x1*y1 + 2*vx2*vy1*x1*y2 + 2*vx2*vy1*x2*y1 - 2*vx2*vy1*x2*y2 + 2*vx2*vy2*x1*y1 - 2*vx2*vy2*x1*y2 - 2*vx2*vy2*x2*y1 + 2*vx2*vy2*x2*y2 - vy1**2*x1**2 + 2*vy1**2*x1*x2 - vy1**2*x2**2 + vy1**2*(r1 + r2)**2 + 2*vy1*vy2*x1**2 - 4*vy1*vy2*x1*x2 + 2*vy1*vy2*x2**2 - 2*vy1*vy2*(r1 + r2)**2 - vy2**2*x1**2 + 2*vy2**2*x1*x2 - vy2**2*x2**2 + vy2**2*(r1 + r2)**2))/(vx1**2 - 2*vx1*vx2 + vx2**2 + vy1**2 - 2*vy1*vy2 + vy2**2)
+                        if t < 0:
+                            t = np.nan
+                        self.Time[i,j] = t
+
+            # Find the time to the walls
+            for i in range(self.N):
+                t_south = (self.particles[i].r - self.particles[i].y) / self.particles[i].vy
+                if t_south < 0:
+                    t_south = np.nan
+                self.Time[i, -4] = t_south
+
+                t_west = (self.particles[i].r - self.particles[i].x) / self.particles[i].vx
+                if t_west < 0:
+                    t_west = np.nan
+                self.Time[i, -3] = t_west
+
+                t_north = (y - self.particles[i].r - self.particles[i].y) / self.particles[i].vy
+                if t_north < 0:
+                    t_north = np.nan
+                self.Time[i, -2] = t_north
+
+                t_east = (x - self.particles[i].r - self.particles[i].x) / self.particles[i].vx
+                if t_east < 0:
+                    t_east = np.nan
+                self.Time[i, -1] = t_east
+
+    def time_to_collision(self):
+        '''
+        Finds the time to collision and updates the time vector
+        '''
+        dt = np.nanmin(self.Time)
+        index = np.where(self.Time == dt)
+        index = [index[0][0], index[1][0]]
+        self.Time = self.Time - dt
+        return dt, index
+
+    def update_time(self, index):
+        '''
+        Updates the time matrix
+        index: index of the collision
+        '''
+        # Particle particle
+        for index, i in enumerate(index):
+            for j in range(self.N):
+                if i != j:
+                    x1 = self.particles[i].x
+                    y1 = self.particles[i].y
+                    x2 = self.particles[j].x
+                    y2 = self.particles[j].y
+                    r1 = self.particles[i].r
+                    r2 = r1
+                    vx1 = self.particles[i].vx
+                    vy1 = self.particles[i].vy
+                    vx2 = self.particles[j].vx
+                    vy2 = self.particles[j].vy
+                    # Find the time to the other particle
+                    t = (-vx1*x1 + vx1*x2 + vx2*x1 - vx2*x2 - vy1*y1 + vy1*y2 + vy2*y1 - vy2*y2 - np.sqrt(-vx1**2*y1**2 + 2*vx1**2*y1*y2 - vx1**2*y2**2 + vx1**2*(r1 + r2)**2 + 2*vx1*vx2*y1**2 - 4*vx1*vx2*y1*y2 + 2*vx1*vx2*y2**2 - 2*vx1*vx2*(r1 + r2)**2 + 2*vx1*vy1*x1*y1 - 2*vx1*vy1*x1*y2 - 2*vx1*vy1*x2*y1 + 2*vx1*vy1*x2*y2 - 2*vx1*vy2*x1*y1 + 2*vx1*vy2*x1*y2 + 2*vx1*vy2*x2*y1 - 2*vx1*vy2*x2*y2 - vx2**2*y1**2 + 2*vx2**2*y1*y2 - vx2**2*y2**2 + vx2**2*(r1 + r2)**2 - 2*vx2*vy1*x1*y1 + 2*vx2*vy1*x1*y2 + 2*vx2*vy1*x2*y1 - 2*vx2*vy1*x2*y2 + 2*vx2*vy2*x1*y1 - 2*vx2*vy2*x1*y2 - 2*vx2*vy2*x2*y1 + 2*vx2*vy2*x2*y2 - vy1**2*x1**2 + 2*vy1**2*x1*x2 - vy1**2*x2**2 + vy1**2*(r1 + r2)**2 + 2*vy1*vy2*x1**2 - 4*vy1*vy2*x1*x2 + 2*vy1*vy2*x2**2 - 2*vy1*vy2*(r1 + r2)**2 - vy2**2*x1**2 + 2*vy2**2*x1*x2 - vy2**2*x2**2 + vy2**2*(r1 + r2)**2))/(vx1**2 - 2*vx1*vx2 + vx2**2 + vy1**2 - 2*vy1*vy2 + vy2**2)
+                    if t < 0:
+                        t = np.nan
+                    self.Time[i,j] = t
+
+            for index, i in enumerate(index):
+                t_south = (self.particles[i].r - self.particles[i].y) / self.particles[i].vy
+                if t_south < 0:
+                    t_south = np.nan
+                self.Time[i, -4] = t_south
+
+                t_west = (self.particles[i].r - self.particles[i].x) / self.particles[i].vx
+                if t_west < 0:
+                    t_west = np.nan
+                self.Time[i, -3] = t_west
+
+                t_north = (y - self.particles[i].r - self.particles[i].y) / self.particles[i].vy
+                if t_north < 0:
+                    t_north = np.nan
+                self.Time[i, -2] = t_north
+
+                t_east = (x - self.particles[i].r - self.particles[i].x) / self.particles[i].vx
+                if t_east < 0:
+                    t_east = np.nan
+                self.Time[i, -1] = t_east
+        
+    def make_pyglet_particles(self, batch: pyglet.graphics.Batch):
+        '''
+        Makes the pyglet particles
+        '''
+        for i in range(self.N):
+            self.particles[i].circle = pyglet.shapes.Circle(self.particles[i].x, self.particles[i].y, self.particles[i].r, color=(153, 0, 0), batch=batch)
+            self.particles[i].circle2 = pyglet.shapes.Circle(self.particles[i].x + 0.5 * self.particles[i].r * np.cos(self.particles[i].angle), self.particles[i].y + 0.5 * self.particles[i].r * np.sin(self.particles[i].angle), 0.25*self.particles[i].r, color=(255, 255, 255), batch=batch)
+
+    def move_all(self, dt: float):
+        '''
+        Moves all particles in the fluid field
+        dt: time to move
+        '''
+        if False: # add drag
+            for i in range(self.N):
+                self.particles[i].dragSpeed(dt)
+
+        for i in range(self.N):
+            self.particles[i].move(dt)
+    
+    def update_pyglet(self):
+        '''
+        Updates the pyglet particles
+        '''
+        for i in range(self.N):
+            self.particles[i].update_pyglet()
+
+    def collision(self):
+        '''
+        Checks for collisions and updates the particle velocities
+        '''
+        # Wall collisions
+        wall_overlap = np.full((self.N,4), False)
+        for i in range(self.N):
+            if self.particles[i].x - self.particles[i].r < 0:
+                if wall_overlap[i, 0]:
+                    continue
+                self.particles[i].vx = abs(self.particles[i].vx)
+                wall_overlap[i, 0] = True
+            else:
+                wall_overlap[i, 0] = False
+            if self.particles[i].x + self.particles[i].r > self.x:
+                if wall_overlap[i, 1]:
+                    continue
+                self.particles[i].vx = -abs(self.particles[i].vx)
+                wall_overlap[i, 1] = True
+            else:
+                wall_overlap[i, 1] = False
+            if self.particles[i].y - self.particles[i].r < 0:
+                if wall_overlap[i, 2]:
+                    continue
+                self.particles[i].vy = abs(self.particles[i].vy)
+                wall_overlap[i, 2] = True
+            else:
+                wall_overlap[i, 2] = False
+            if self.particles[i].y + self.particles[i].r > self.y:
+                if wall_overlap[i, 3]:
+                    continue
+                self.particles[i].vy = -abs(self.particles[i].vy)
+                wall_overlap[i, 3] = True
+            else:
+                wall_overlap[i, 3] = False
+        
+        # Particle collisions
+        # Initialize the overlap matrix
+        overlap = np.full((self.N, self.N), False)
+
+        if self.FricRes: # Friction and restitution
+            for i in range(self.N-1):
+                for j in range(i+1, self.N):
+                    if i == j:
+                        continue
+                    
+                    x_i = np.array([self.particles[i].x, self.particles[i].y, 0])
+                    x_j = np.array([self.particles[j].x, self.particles[j].y, 0])
+                    r_i = self.particles[i].r
+                    r_j = self.particles[j].r
+
+                    distance = np.sqrt(((x_j - x_i)**2).sum())
+                    # Check if the particles are overlapping
+                    if distance < (r_i + r_j): # If the particles are overlapping
+                        if overlap[i, j]: # If the particles are already overlapping
+                            continue
+                        overlap[i, j] = True # Set the overlap to True
+                        v_i = np.array([self.particles[i].vx, self.particles[i].vy, 0])
+                        omega_i = np.array([0, 0, self.particles[i].Rot])
+                        m_i = self.particles[i].m
+
+                        v_j = np.array([self.particles[j].vx, self.particles[j].vy, 0])
+                        omega_j = np.array([0, 0, self.particles[j].Rot])   
+                        m_j = self.particles[j].m
+
+                        n = (x_j - x_i) / distance
+                        G0 = v_i - v_j
+
+                        G0_c = G0 + np.cross(r_i * omega_i, n) + np.cross(r_j * omega_j, n)
+                        G0_ct = G0_c -np.dot(G0_c, n) * n
+                        
+                        t = G0_ct / np.linalg.norm(G0_ct)
+
+                        if np.dot(n, G0) / np.linalg.norm(G0_ct) >= (2/7) * 1 / (self.f * (1 + self.e)): # Check for continus sliding
+                            v1 = v_i - (n + self.f*t) * np.dot(n, G0) * (1 + self.e) * m_j / (m_j + m_i)
+                            v2 = v_j + (n + self.f*t) * np.dot(n, G0) * (1 + self.e) * m_i / (m_j + m_i)
+                            omega1 = omega_i - 5/(2*r_i) * np.dot(n, G0) * np.cross(n, t) * self.f*(1 + self.e) * m_j / (m_j + m_i)
+                            omega2 = omega_j - 5/(2*r_j) * np.dot(n, G0) * np.cross(n, t) * self.f*(1 + self.e) * m_i / (m_j + m_i)
+
+                        else:
+                            v1 = v_i - ((1 + self.e) * np.dot(n,G0) * n + 2/7 * np.linalg.norm(G0_ct) * t) * m_j / (m_j + m_i)
+                            v2 = v_j + ((1 + self.e) * np.dot(n,G0) * n + 2/7 * np.linalg.norm(G0_ct) * t) * m_i / (m_j + m_i)
+                            omega1 = omega_i - 5/(7*r_i) * np.linalg.norm(G0_ct) * np.cross(n, t) * m_j / (m_j + m_i)
+                            omega2 = omega_j - 5/(7*r_j) * np.linalg.norm(G0_ct) * np.cross(n, t) * m_i / (m_j + m_i)
+
+                        self.particles[i].vx = v1[0]
+                        self.particles[i].vy = v1[1]
+                        self.particles[j].vx = v2[0]
+                        self.particles[j].vy = v2[1]
+                        self.particles[i].Rot = omega1[2]
+                        self.particles[j].Rot = omega2[2]
+                        
+                    else:
+                        overlap[i, j] = False
+        
+        else: # No friction and restitution
+            for i in range(self.N-1):
+                for j in range(i+1, self.N):
+                    if i == j:
+                        continue
+                    # Check if the particles are overlapping
+                    distance = np.sqrt((self.particles[j].x - self.particles[i].x)**2 + (self.particles[j].y - self.particles[i].y)**2)
+                    if distance < self.particles[i].r + self.particles[j].r: # If the particles are overlapping
+                        if overlap[i, j]: # If the particles are already overlapping
+                            continue
+                        overlap[i, j] = True # Set the overlap to True
+                        G0 = np.array([self.particles[i].vx - self.particles[j].vx, self.particles[i].vy - self.particles[j].vy])
+                        n = np.array([self.particles[j].x - self.particles[i].x, self.particles[j].y - self.particles[i].y]) / distance
+                        dvel = n * np.dot(n, G0)
+                        self.particles[i].vx -= dvel[0] * 2 * self.particles[j].m / (self.particles[i].m + self.particles[j].m)
+                        self.particles[i].vy -= dvel[1] * 2 * self.particles[j].m / (self.particles[i].m + self.particles[j].m)
+                        self.particles[j].vx += dvel[0] * 2 * self.particles[i].m / (self.particles[i].m + self.particles[j].m)
+                        self.particles[j].vy += dvel[1] * 2 * self.particles[i].m / (self.particles[i].m + self.particles[j].m)
+                        
+                    else:
+                        overlap[i, j] = False
 
     def ke_total(self):
         '''
@@ -242,38 +458,65 @@ class FluidField:
         for i in range(self.N):
             speed += self.particles[i].speed()
         return speed
-    
-    def get_lowest_time(self):
-        '''
-        Returns the lowest time, index of the time vector and the pair of particles
-        out: min_value, min_index
-        '''
-        min_value = np.nanmin(self.time_vector)
-        min_index = np.nanargmin(self.time_vector)
-        min_pair = self.vec_to_mat[:, min_index]
 
-        return min_value, min_index, min_pair
-
-class Simulation:
-    def __init__(self, total_time: float, field: FluidField):
+    def do_in_sim(self):
         '''
-        Creates a simulation with the parameters: dt, total_time, field
-        total_time: total time of the simulation
-        field: fluid field
+        Things to do in the sim
         '''
-        self.total_time = total_time
-        self.field = field
+        print(self.ke_total())
+        print(self.speed_total())
 
-    def run_steps(self, steps: int):
-        next_time = 0
-        for i in range(steps):
-            next_time, min_index, min_pair = self.field.get_lowest_time()[0]
-            self.field = move(self.field, next_time)
-
+    def simulate(self, dt: float, t: float):
+        '''
+        Simulates the fluid field for a given time
+        dt: time step
+        t: time to simulate
+        '''
+        time = 0
+        if self.TimeJump:
+            while time < t:
+                self.do_in_sim()
+                dt, index = self.time_to_collision()
+                self.move_all(dt)
+                self.collision()
+                self.update_time(index)
+                time += dt
+        
+        else:
+            while time < t:
+                self.do_in_sim()
+                self.move_all(dt)
+                self.collision()
+                time += dt
+            
+    def simulate_pyglet(self, dt: float):
+        '''
+        Simulates the fluid field in pyglet
+        dt: time step
+        '''
+        self.move_all(dt)
+        self.update_pyglet()
+        self.collision()
 
 if __name__ == "__main__":
+    field = FluidField(x=1000, y=1000, N=30, Maxr=40, MaxV=100, MaxRot=10,TimeJump=False, FricRes=False) 
 
-    field = FluidField(x = 10, y = 10, N = 1, r = 1, MaxV = 1, MaxRot = 1)
-    print(field.get_lowest_time())
+    if False: # simulate
+        field.simulate(0.01, 10)
+    
+    
+    if True: # Pyglet
+        window = pyglet.window.Window(1000, 1000)
+        batch = pyglet.graphics.Batch()
+        @window.event
+        def on_draw():
+            window.clear()
+            batch.draw()
+        pyglet.clock.schedule_interval(field.simulate_pyglet, 1/30)
+        field.make_pyglet_particles(batch)
+        pyglet.app.run()
+        del window
+        del batch    
+
 
     print("Stop")

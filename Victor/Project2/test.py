@@ -1,4 +1,4 @@
 import numpy as np
 
 
-print(np.ones(2))
+print(np.full((3, 3), None))
