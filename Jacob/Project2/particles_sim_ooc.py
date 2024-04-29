@@ -6,52 +6,48 @@ import pyglet
 from typing import Tuple, List
 
 class particle():
-    def __init__(self, e = 0.5, f = 0.5, rho = 1, rho_c = 1, radius = 20, position = np.array((0, 0)), velocity = np.array((0, 0)), angle = 0, omega = 0):
-        self.e = e
-        self.f = f
-        self.rho = rho
-        self.rho_c = rho_c
-        self.position = position
-        self.velocity = velocity
-        self.pyglet_radius = radius * 1000
-        self.radius = radius
-        self.mass = 4/3 * np.pi * self.radius ** 3 * self.rho
-        self.I = 2/5 * self.mass * self.radius ** 2
-        self.color1 = (20, 20, 250)
+    def __init__(self, e = 0.5, f = 0.5, rho = 1, rho_c = 1, radius = 20, position = np.array((0, 0)), velocity = np.array((0, 0)), angle = 0, omega = 0, wall_res_fric = True, drag = False):
+        self.e = e # coefficient of restitution
+        self.f = f # coefficient of friction
+        self.rho = rho # density of the particle
+        self.rho_c = rho_c # density of the carrier fluid
+        self.position = position # position of the particle
+        self.velocity = velocity # velocity of the particle
+        self.radius = radius # radius of the particle
+        self.mass = 4/3 * np.pi * self.radius ** 3 * self.rho  # mass of the particle
+        self.I = 2/5 * self.mass * self.radius ** 2 # moment of inertia of the particle
+        self.C_D = 0.445 # drag coefficient (Alternative to using property decorator)
+        self.color1 = (20, 20, 250) 
         self.color2 = (200, 200, 250)
-        self.angle = angle
-        self.omega = omega
+        self.angle = angle # angle of the particle
+        self.omega = omega # angular velocity of the particle
         self.circle = None
         self.circle2 = None
 
-        self.t = None
-
         self.cs = self.f == 0 # use continuous sliding model if f = 0
 
-        self.in_wall_collision = [False, False, False, False]
+        self.in_wall_collision = [False, False, False, False] # list for checking if the particle is in collision with the walls (west, east, south, north)
 
-        self.wall_res_fric = False # If True enable friction and restitution on the walls
-        self.drag = False # If True enable drag force
+        self.wall_res_fric = wall_res_fric # If True enable friction and restitution on the walls
+        self.drag = drag # If True enable drag force
 
-    @property
-    def C_D(self) -> float:
-        # Using property decorator to allow for drag coefficient to be a function of velocity, Re etc.
-        return 0.445 # drag coefficient
+
+    # @property
+    # def C_D(self) -> float:
+    #     # Using property decorator to allow for drag coefficient to be a function of velocity, Re etc.
+    #     return 0.445 # drag coefficient
     
     @property
     def F_D(self) -> np.ndarray:
+        # Calculate the drag force on the particle
         F_D = -0.5 * self.C_D * self.rho_c * np.pi * self.radius ** 2 * np.linalg.norm(self.velocity) * self.velocity
         return F_D
     
     @property
     def a_D(self) -> np.ndarray:
+        # Calculate the acceleration due to the drag force
         return self.F_D / self.mass
 
-    @property
-    def Fmag(self) -> float:
-        # Magnus force
-        Fmag = np.pi/8*(self.radius*2)**3*self.rho_c**self.omega*(self.velocity[0]+self.velocity[1])
-        return Fmag
     def move(self, dt: float) -> None:
         self.position += self.velocity * dt # update position
         self.angle += self.omega * dt # update angle
@@ -60,8 +56,28 @@ class particle():
             self.velocity += self.a_D * dt # drag force
 
     def update_pyglet(self) -> None:
-        self.circle.position = self.position[0], self.position[1]
-        self.circle2.position = self.position[0] + 0.5 * self.radius * np.cos(self.angle), self.position[1] + 0.5 * self.radius * np.sin(self.angle)
+        # update the pyglet window
+        self.circle.position = self.position[0]*1000, self.position[1]*1000
+        self.circle2.position = self.position[0]*1000 + 0.5 * self.radius*1000 * np.cos(self.angle), self.position[1]*1000 + 0.5 * self.radius*1000 * np.sin(self.angle)
+
+    def get_v_1_and_o_1(self, v, o, n) -> Tuple[np.ndarray, np.ndarray]:
+        # Calculate the new velocity and angular velocity of the particle after collision with the wall
+        G0 = v # relative velocity at the moment of contact, v2= 0 because the wall is stationary
+        G0_c = G0 + np.cross(self.radius*o, n)  # relative velocity at the moment of contact in the contact frame
+        G0_ct = G0_c - np.dot(G0_c, n) * n # relative velocity at the moment of contact in the tangential frame
+
+        t = G0_ct / np.linalg.norm(G0_ct) # unit vector in the tangential frame
+
+        if self.cs or np.dot(n, G0)/np.linalg.norm(G0_ct) < (2/7)*1/(self.f * (1 + self.e)):
+            # Continuous sliding 
+            v_1 = v - (n + self.f * t) * np.dot(n, G0) * (1 + self.e) 
+            o_1 = o - 5/(2*self.radius) * np.dot(n, G0) * np.cross(n, t) * self.f * (1 + self.e)
+        else:
+            # Non-continuous sliding
+            v_1 = v - ((1 + self.e) * np.dot(n, G0) * n + 2/7 * np.linalg.norm(G0_ct) * t)
+            o_1 = o - 5/(7*self.radius) * np.linalg.norm(G0_ct) * np.cross(n, t)
+
+        return v_1, o_1
 
     def wall_collision(self, window_size: Tuple[int, int]) -> None:
         # handle particle collition with the walls
@@ -70,91 +86,53 @@ class particle():
         south_collision = self.position[1] < self.radius
         north_collision = self.position[1] > window_size[1] - self.radius
 
-        if self.wall_res_fric:
-            # If True enable friction and restitution on the walls
-            v_x = self.velocity[0]
-            v_y = self.velocity[1]
-            v = np.linalg.norm(self.velocity)
-            omega = self.omega
+        if self.wall_res_fric: # If True enable friction and restitution on the walls
+
+            x = np.append(self.position,0)
+            v = np.append(self.velocity, 0)
+            o = np.array([0, 0, self.omega])
 
             if west_collision and not self.in_wall_collision[0]:
                 self.in_wall_collision[0] = True
-                v_x_1 = - self.e * v_x
-                if self.cs or (- 2 / (7 * self.f * (self.e + 1)) < v_x / v and v_x / v < 0):
-                    # Continuous sliding
-                    v_y_1 = np.sign(v_y) * (abs(v_y) - abs(self.f * (self.e + 1) * v_x))
-                    omega_1 =  omega + np.sign(v_y) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_x)
-                elif - 2 / (7 * self.f * (self.e + 1)) > v_x / v:
-                    # Non-continuous sliding
-                    v_y_1 =  5/7 * (v_y + 2 * self.radius * self.omega / 5 )
-                    omega_1 = v_y_1 / self.radius
-
-                else:
-                    msg = 'Error in west wall collision'
-                    raise ValueError(msg)
                 
-                self.velocity = np.array([v_x_1, v_y_1])
-                self.omega = omega_1
+                # Unit vector in the direction of the wall
+                n = np.array([-1, 0, 0])
+                v_1, o_1 = self.get_v_1_and_o_1(v, o, n)
+                self.velocity = v_1[:2]
+                self.omega = o_1[2]
 
                 # self.velocity[0] = abs(self.velocity[0])
 
             if east_collision and not self.in_wall_collision[1]:
                 self.in_wall_collision[1] = True
-                v_x_1 = - self.e * v_x
-                if self.cs or (2 / (7 * self.f * (self.e + 1)) > v_x / v and v_x / v > 0):
-                    # Continuous sliding
-                    v_y_1 = np.sign(v_y) * (abs(v_y) - abs(self.f * (self.e + 1) * v_x))
-                    omega_1 =  omega - np.sign(v_y) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_x)
-                elif 2 / (7 * self.f * (self.e + 1)) < v_x / v:
-                    # Non-continuous sliding
-                    v_y_1 =  5/7 * (v_y - 2 * self.radius * self.omega / 5 )
-                    omega_1 = - v_y_1 / self.radius
-                else:
-                    msg = 'Error in east wall collision'
-                    raise ValueError(msg)
-                
-                self.velocity = np.array([v_x_1, v_y_1])
-                self.omega = omega_1
+
+                # unit vector in the direction of the wall
+                n = np.array([1, 0, 0])
+                v_1, o_1 = self.get_v_1_and_o_1(v, o, n)
+                self.velocity = v_1[:2]
+                self.omega = o_1[2]
 
                 # self.velocity[0] = -abs(self.velocity[0])
-
+                
             if south_collision and not self.in_wall_collision[2]:
                 self.in_wall_collision[2] = True
-                v_y_1 = - self.e * v_y
-                if  self.cs or (- 2 / (7 * self.f * (self.e + 1)) < v_y / v and v_y / v < 0):
-                    # Continuous sliding
-                    v_x_1 = np.sign(v_x) * (abs(v_x) - abs(self.f * (self.e + 1) * v_y))
-                    omega_1 =  omega - np.sign(v_x) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_y)
-                elif - 2 / (7 * self.f * (self.e + 1)) > v_y / v:
-                    # Non-continuous sliding
-                    v_x_1 =  5/7 * (v_x - 2 * self.radius * self.omega / 5 )
-                    omega_1 = - v_x_1 / self.radius
-                else:
-                    msg = 'Error in south wall collision'
-                    raise ValueError(msg)
-                
-                self.velocity = np.array([v_x_1, v_y_1])
-                self.omega = omega_1
+
+                # Unit vector in the direction of the wall
+                n = np.array([0, - 1, 0])
+                v_1, o_1 = self.get_v_1_and_o_1(v, o, n)
+                self.velocity = v_1[:2]
+                self.omega = o_1[2]
 
                 # self.velocity[1] = abs(self.velocity[1])
 
             if north_collision and not self.in_wall_collision[3]:
                 self.in_wall_collision[3] = True
-                v_y_1 = - self.e * v_y
-                if self.cs or (2 / (7 * self.f * (self.e + 1)) > v_y / v and v_y / v > 0):
-                    # Continuous sliding
-                    v_x_1 = np.sign(v_x) * (abs(v_x) - abs(self.f * (self.e + 1) * v_y))
-                    omega_1 =  omega + np.sign(v_x) * abs(5 / (2 * self.radius) * self.f * (self.e + 1) * v_y)
-                elif 2 / (7 * self.f * (self.e + 1)) < v_y / v:
-                    # Non-continuous sliding
-                    v_x_1 =  5/7 * (v_x + 2 * self.radius * self.omega / 5 )
-                    omega_1 =  v_x_1 / self.radius
-                else:
-                    msg = 'Error in north wall collision'
-                    raise ValueError(msg)
                 
-                self.velocity = np.array([v_x_1, v_y_1])
-                self.omega = omega_1
+                # Unit vector in the direction of the wall
+                n = np.array([0, 1, 0])
+                v_1, o_1 = self.get_v_1_and_o_1(v, o, n)
+                self.velocity = v_1[:2]
+                self.omega = o_1[2]
 
                 # self.velocity[1] = -abs(self.velocity[1])
 
@@ -183,31 +161,30 @@ class particle():
 
     @property
     def rotational_kinetic_energy(self) -> float:
-        return 0.5 * self.I * self.omega ** 2
+        return 0.5 * self.I * self.omega ** 2 # rotational kinetic energy
     
     @property
     def translational_kinetic_energy(self) -> float:
-        return 0.5 * self.mass * np.linalg.norm(self.velocity) ** 2
+        return 0.5 * self.mass * np.linalg.norm(self.velocity) ** 2 # translational kinetic energy
     
     @property
     def kinetic_energy(self) -> float:
-        return self.rotational_kinetic_energy + self.translational_kinetic_energy
+        return self.rotational_kinetic_energy + self.translational_kinetic_energy # total kinetic energy
 
 class sim_particles():
-    def __init__(self, window_size = np.array((800, 800)), nparticles = 20, e = 0.5, f = 0.5, random_particles = [False, False]) -> None:
-        
+    def __init__(self, window_size = np.array((800, 800)), nparticles = 20, e = 0.5, f = 0.5, random_particles = [False, False], particle_res_fric = True, wall_res_fric = True, drag = False) -> None:
         self.window_size = window_size
         self.nparticles = nparticles
         
         self.e = e
         self.f = f
-        self.max_velocity = 200 # max velocity of the particles when initialized
+        self.max_velocity = 200/1000 # max velocity of the particles when initialized
         self.max_omega = 0.5 # max angular velocity of the particles when initialized
 
-        self.max_rho = 1 # max density of the particles (also used when random_rho = False)
-        self.max_radius = 20 # max radius of the particles (also used when random_radius = False)
+        self.max_rho = 1000 # max density of the particles (also used when random_rho = False)
+        self.max_radius = 20/1000 # max radius of the particles (also used when random_radius = False)
 
-        self.rho_c = 1 # density of the carrier fluid (used for drag force)
+        self.rho_c = 100 # density of the carrier fluid (used for drag force)
 
         self.color1 = (20, 20, 250)
         self.color2 = (200, 200, 250)
@@ -226,20 +203,24 @@ class sim_particles():
 
         self.random_radius = random_particles[0] # If True enable random radius of the particles
         self.random_rho = random_particles[1] # If True enable random density of the particles
-        self.particle_res_fric = False # If True enable friction and restitution on the particles
+        self.particle_res_fric = particle_res_fric # If True enable friction and restitution on the particles
+        self.wall_res_fric = wall_res_fric # If True enable friction and restitution on the walls
+        self.drag = drag # If True enable drag force
 
         self.make_particles() # make the particles
              
     def make_particles(self) -> None:
         # Make seed for reproducibility
-        np.random.seed(1915)
+        np.random.seed(3)
         if self.random_radius:
-            radius = np.random.rand(self.nparticles) * self.max_radius
+            min_radius = 0.3 * self.max_radius
+            radius = np.random.rand(self.nparticles) * (self.max_radius - min_radius) + min_radius
         else:
             radius = np.full(self.nparticles, self.max_radius)
 
         if self.random_rho:
-            rho = np.random.rand(self.nparticles) * self.max_rho
+            min_rho = 0.05 * self.max_rho
+            rho = np.random.rand(self.nparticles) * (self.max_rho - min_rho) + min_rho
         else:
             rho = np.full(self.nparticles, self.max_rho)
         # make particles in a grid at least one diameter from walls  
@@ -260,23 +241,25 @@ class sim_particles():
         velangle = np.random.rand(self.nparticles) * 2 * np.pi
         # velocity += np.random.rand(self.nparticles).reshape(-1,1) * self.max_velocity \
         #             * np.array([np.cos(velangle), np.sin(velangle)]).T
+        # omega = (np.random.rand(self.nparticles) - 0.5) * 2 * self.max_omega
         # All partciels start with the same velocity
         velocity += np.ones(self.nparticles).reshape(-1,1) * self.max_velocity \
                     * np.array([np.cos(velangle), np.sin(velangle)]).T
-        omega = (np.random.rand(self.nparticles) - 0.5) * 2 * self.max_omega
+        omega = np.full(self.nparticles, 0.0)
         # Make the particles and append them to the list
+        angle = np.zeros(self.nparticles)
         for i in range(self.nparticles):
-            self.particles.append(particle(self.e, self.f, rho[i], self.rho_c, radius[i], position[i], velocity[i], 0, omega[i]))
+            self.particles.append(particle(self.e, self.f, rho[i], self.rho_c, radius[i], position[i], velocity[i], angle[i] , omega[i], self.wall_res_fric, self.drag))
 
     def make_particles_pyglet(self, batch: pyglet.graphics.Batch) -> None:
         # Make the particles in pyglet
         for i in range(self.nparticles):
-            self.particles[i].circle = pyglet.shapes.Circle(self.particles[i].position[0], 
-                                                            self.particles[i].position[1], 
-                                                            self.particles[i].radius, color = self.color1, batch = batch)
-            self.particles[i].circle2 = pyglet.shapes.Circle(self.particles[i].position[0] + 0.5 * self.particles[i].radius * np.cos(self.particles[i].angle), 
-                                                            self.particles[i].position[1] + 0.5 * self.particles[i].radius * np.sin(self.particles[i].angle), 
-                                                            0.25 * self.particles[i].radius, color = self.color2, batch = batch)
+            self.particles[i].circle = pyglet.shapes.Circle(self.particles[i].position[0]*1000, 
+                                                            self.particles[i].position[1]*1000, 
+                                                            self.particles[i].radius*1000, color = self.color1, batch = batch)
+            self.particles[i].circle2 = pyglet.shapes.Circle(self.particles[i].position[0]*1000 + 0.5 * self.particles[i].radius*1000 * np.cos(self.particles[i].angle), 
+                                                            self.particles[i].position[1]*1000 + 0.5 * self.particles[i].radius*1000 * np.sin(self.particles[i].angle), 
+                                                            0.25 * self.particles[i].radius*1000, color = self.color2, batch = batch)
     
     def move_particles(self, dt: float) -> None:
         # move the particles for a time step dt
@@ -418,7 +401,10 @@ class sim_particles():
         
         if not np.isnan(t_y):
             if not np.isnan(t_x):
-                return min(t_x, t_y)
+                t = min(t_x, t_y)
+                if not t <= 0:
+                    return t
+                return 
         return np.NaN
     
     def init_time_before_collision_matrix(self) -> None:
@@ -488,8 +474,11 @@ class sim_particles():
             tau_pw = self.tau_pw_matrix[i]
             tau = np.nanmin([tau_pp, tau_pw])
             v = np.linalg.norm(self.particles[i].velocity)
+            if tau <= 0:
+                print("Error in mean free path")
             free_path.append(v * tau)
-        return np.mean(free_path)
+        free_path = np.array(free_path)
+        return np.mean(free_path[free_path>=0])
 
     def update_stats(self) -> None:
         # Update the statistics for the simulation
@@ -504,7 +493,7 @@ class sim_particles():
         
         self.t = np.arange(0, T + dt, dt)
         for i in range(N + 1):
-            print(f'Simulation time {i*dt:.4f} of {T}')
+            # print(f'Simulation time {i*dt:.4f} of {T}')
             self.move_particles(dt)
             self.wall_collision()
             self.particle_collision()
@@ -517,7 +506,7 @@ class sim_particles():
         self.init_time_before_collision_matrix()
         self.t = []
         while t < T:
-            print(f'Simulation time {t:.4f} of {T}')
+            # print(f'Simulation time {t:.4f} of {T}')
             dt, particles, collision_type = self.dt_before_collision()
             if dt + t > T:
                 dt = T - t
@@ -534,6 +523,8 @@ class sim_particles():
         plt.plot(self.t, self.kinetic_energy)
         plt.xlabel('time (s)')
         plt.ylabel('kinetic energy (J)')
+        plt.grid()
+        plt.tight_layout()
 
     def plot_mean_free_path(self) -> None:
         plt.figure()
@@ -545,7 +536,7 @@ class sim_particles():
         plots = len(n_lst)
         fig, ax = plt.subplots(1, plots, figsize = (6 * plots, 4))
         for i in range(plots):
-            ax[i].hist(self.velocity[n_lst[i]], bins = 50)
+            ax[i].hist(self.velocity[n_lst[i]], bins = self.nparticles )
             ax[i].set_title(f'Velocity distribution at time {self.t[n_lst[i]]:.2f}')
             ax[i].set_xlabel('Velocity')
             ax[i].set_ylabel('Count')
@@ -567,25 +558,26 @@ class sim_particles():
         self.particle_collision()
         self.update_time_before_collision_matrix(dt, particles, collision_type)
 
+# Functions for plotting
 def pp_ke_vs_f(fig_path):
     # Plot the kinetic energy of the particles vs the coefficient of friction only taking particle-particle collisions into account
-    _window_size = np.array((750, 750)) # window size
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
     _nparticles = 20 # number of particles
     _e = 1.0 # coefficient of restitution
-    _f = np.linspace(0, 0.5, 5) # coefficient of friction
+    _f = np.linspace(0, 0.5, 20) # coefficient of friction
     _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _particle_res_fric = True # If True enable friction and restitution on the particles
+    _wall_res_fric = False # If True enable friction and restitution on the walls
+    _drag = False # If True enable drag force
     ke = []
     for f in _f:
-        sim = sim_particles(_window_size, _nparticles, _e, f, _random_particles)
-        sim.particle_res_fric = True
-        for p in sim.particles:
-            p.wall_res_fric = False
-            p.drag = False
+        sim = sim_particles(_window_size, _nparticles, _e, f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
         sim.simulate_non_fixed_dt(25)
         ke.append(sim.kinetic_energy[-1])
     
     fig_save = os.path.join(fig_path, 'pp_ke_vs_f.pdf')
     plt.figure()
+    plt.ylim(min(ke) - min(ke)/100, max(ke) + max(ke)/100)
     plt.plot(_f, ke, 'o-')
     plt.xlabel('Coefficient of friction, f (-)')
     plt.ylabel('Kinetic energy (J)')
@@ -594,48 +586,92 @@ def pp_ke_vs_f(fig_path):
 
 def pp_ke_vs_e(fig_path):
     # Plot the kinetic energy of the particles vs the coefficient of restitution only taking particle-particle collisions into account
-    _window_size = np.array((750, 750)) # window size
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
     _nparticles = 20 # number of particles
-    _e = np.linspace(0.01, 1, 5) # coefficient of restitution
-    _f = 0.3 # coefficient of friction
+    _e = np.linspace(0.1, 1, 20) # coefficient of restitution
+    _f = 0 # coefficient of friction
     _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _particle_res_fric = True # If True enable friction and restitution on the particles
+    _wall_res_fric = False # If True enable friction and restitution on the walls
+    _drag = False # If True enable drag force
     ke = []
     for e in _e:
-        sim = sim_particles(_window_size, _nparticles, e, _f, _random_particles)
-        sim.particle_res_fric = True
-        for p in sim.particles:
-            p.wall_res_fric = False
-            p.drag = False
+        sim = sim_particles(_window_size, _nparticles, e, _f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
         sim.simulate_non_fixed_dt(25)
         ke.append(sim.kinetic_energy[-1])
     
     fig_save = os.path.join(fig_path, 'pp_ke_vs_e.pdf')
     plt.figure()
+    plt.ylim(min(ke) - min(ke)/100, max(ke) + max(ke)/100)
     plt.plot(_e, ke, 'o-')
     plt.xlabel('Coefficient of restitution, e (-)')
     plt.ylabel('Kinetic energy (J)')
     plt.grid()
     plt.savefig(fig_save)
 
+def pp_ke(fig_path):
+    # Plot the kinetic energy of the particles vs the coefficient of friction and restitution only taking particle-particle collisions into account
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
+    _nparticles = 20 # number of particles
+    num = 30
+    _e = np.linspace(0.1, 1, num) # coefficient of restitution
+    _f = np.linspace(0, 0.5, num) # coefficient of friction
+    _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _particle_res_fric = True # If True enable friction and restitution on the particles
+    _wall_res_fric = False # If True enable friction and restitution on the walls
+    _drag = False # If True enable drag force
+    ke = np.zeros((len(_e), len(_f)))
+    for i, e in enumerate(_e):
+        for j, f in enumerate(_f):
+            print(f'Simulation {i*num + j + 1} of {num*num}')
+            sim = sim_particles(_window_size, _nparticles, e, f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
+            sim.simulate_non_fixed_dt(25)
+            ke[i,j] = sim.kinetic_energy[-1]
+
+    fig_save = os.path.join(fig_path, 'pp_ke.pdf')
+    # Plot using pcolormesh
+    plt.figure()
+    pcm = plt.pcolormesh(_f, _e, ke)
+    plt.colorbar(pcm, label = 'Kinetic energy (J)')
+    plt.xlabel('Coefficient of friction, f (-)')
+    plt.ylabel('Coefficient of restitution, e (-)')
+    plt.grid()
+    plt.savefig(fig_save)
+
+    # Plot in 3D using plot_surface and colorbar
+    fig_save = os.path.join(fig_path, 'pp_ke_3D.pdf')
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    X, Y = np.meshgrid(_f, _e)
+    ax.plot_surface(X, Y, ke, cmap = 'viridis')
+    ax.set_xlabel('Coefficient of friction, f (-)')
+    ax.set_ylabel('Coefficient of restitution, e (-)')
+    ax.set_zlabel('Kinetic energy (J)')
+
+    plt.savefig(fig_save)
+
 def pw_ke_vs_f(fig_path):
     # Plot the kinetic energy of the particles vs the coefficient of friction only taking particle-wall collisions into account
-    _window_size = np.array((750, 750)) # window size
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
     _nparticles = 20 # number of particles
     _e = 1.0 # coefficient of restitution
-    _f = np.linspace(0, 0.5, 5) # coefficient of friction
+    _f = np.linspace(0, 0.5, 25) # coefficient of friction
     _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _particle_res_fric = False # If True enable friction and restitution on the particles
+    _wall_res_fric = True # If True enable friction and restitution on the walls
+    _drag = False # If True enable drag force
+    
     ke = []
     for f in _f:
-        sim = sim_particles(_window_size, _nparticles, _e, f, _random_particles)
-        sim.particle_res_fric = False
-        for p in sim.particles:
-            p.wall_res_fric = True
-            p.drag = False
+        print(f'Simulation {f} of {_f[-1]}')
+        sim = sim_particles(_window_size, _nparticles, _e, f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
         sim.simulate_non_fixed_dt(25)
         ke.append(sim.kinetic_energy[-1])
     
     fig_save = os.path.join(fig_path, 'pw_ke_vs_f.pdf')
     plt.figure()
+    plt.ylim(min(ke) - min(ke)/100, max(ke) + max(ke)/100)
     plt.plot(_f, ke, 'o-')
     plt.xlabel('Coefficient of friction, f (-)')
     plt.ylabel('Kinetic energy (J)')
@@ -644,45 +680,86 @@ def pw_ke_vs_f(fig_path):
 
 def pw_ke_vs_e(fig_path):
     # Plot the kinetic energy of the particles vs the coefficient of restitution only taking particle-wall collisions into account
-    _window_size = np.array((750, 750)) # window size
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
     _nparticles = 20 # number of particles
     _e = np.linspace(0.01, 1, 25) # coefficient of restitution
-    _f = 0.3 # coefficient of friction
+    _f = 0 # coefficient of friction
     _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _particle_res_fric = False # If True enable friction and restitution on the particles
+    _wall_res_fric = True # If True enable friction and restitution on the walls
+    _drag = False # If True enable drag force
     ke = []
     for e in _e:
-        sim = sim_particles(_window_size, _nparticles, e, _f, _random_particles)
-        sim.particle_res_fric = False
-        for p in sim.particles:
-            p.wall_res_fric = True
-            p.drag = False
+        print(f'Simulation {e} of {_e[-1]}')
+        sim = sim_particles(_window_size, _nparticles, e, _f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
         sim.simulate_non_fixed_dt(25)
         ke.append(sim.kinetic_energy[-1])
     
     fig_save = os.path.join(fig_path, 'pw_ke_vs_e.pdf')
     plt.figure()
     plt.plot(_e, ke, 'o-')
+    plt.ylim(min(ke) - min(ke)/100, max(ke) + max(ke)/100)
     plt.xlabel('Coefficient of restitution, e (-)')
     plt.ylabel('Kinetic energy (J)')
     plt.grid()
     plt.savefig(fig_save)
 
+def pw_ke(fig_path):
+    # Plot the kinetic energy of the particles vs the coefficient of friction and restitution only taking particle-wall collisions into account
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
+    _nparticles = 20 # number of particles
+    num = 30
+    _e = np.linspace(0.1, 1, num) # coefficient of restitution
+    _f = np.linspace(0, 0.5, num) # coefficient of friction
+    _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _particle_res_fric = False # If True enable friction and restitution on the particles
+    _wall_res_fric = True # If True enable friction and restitution on the walls
+    _drag = False # If True enable drag force
+    ke = np.zeros((len(_e), len(_f)))
+    for i, e in enumerate(_e):
+        for j, f in enumerate(_f):
+            print(f'Simulation {i*num + j + 1} of {num*num}')
+            sim = sim_particles(_window_size, _nparticles, e, f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
+            sim.simulate_non_fixed_dt(25)
+            ke[i,j] = sim.kinetic_energy[-1]
+
+    fig_save = os.path.join(fig_path, 'pw_ke.pdf')
+    # Plot using pcolormesh
+    plt.figure()
+    pcm = plt.pcolormesh(_f, _e, ke)
+    plt.colorbar(pcm, label = 'Kinetic energy (J)')
+    plt.xlabel('Coefficient of friction, f (-)')
+    plt.ylabel('Coefficient of restitution, e (-)')
+    plt.grid()
+    plt.savefig(fig_save)
+
+    # Plot in 3D using plot_surface and colorbar
+    fig_save = os.path.join(fig_path, 'pw_ke_3D.pdf')
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    X, Y = np.meshgrid(_f, _e)
+    ax.plot_surface(X, Y, ke, cmap = 'viridis')
+    ax.set_xlabel('Coefficient of friction, f (-)')
+    ax.set_ylabel('Coefficient of restitution, e (-)')
+
+    plt.savefig(fig_save)
+
 def sim_steps_vs_particles(fig_path):
     # Simulate the time vs the number of particles
-    _window_size = np.array((750, 750)) # window size
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
     _nparticles = np.arange(5, 105, 5) # number of particles
     _e = 0.8 # coefficient of restitution
     _f = 0.2 # coefficient of friction
     _random_particles = [False, False] # Bools for implemting random radius and/or random density
-    time_fixed_dt = []
+    _particle_res_fric = True # If True enable friction and restitution on the particles
+    _wall_res_fric = True # If True enable friction and restitution on the walls
+    _drag = False # If True enable drag force
+
     time_non_fixed_dt = []
     for nparticles in _nparticles:
 
-        sim = sim_particles(_window_size, nparticles, _e, _f, _random_particles)
-        sim.particle_res_fric = True
-        for p in sim.particles:
-            p.wall_res_fric = True
-            p.drag = False
+        sim = sim_particles(_window_size, nparticles, _e, _f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
         sim.simulate_non_fixed_dt(25)
         time_non_fixed_dt.append(len(sim.t))
     
@@ -696,21 +773,21 @@ def sim_steps_vs_particles(fig_path):
 
 def drag_ke_vs_rho_c(fig_path):
     # Plot the kinetic energy of the particles vs the density of the carrier fluid
-    _window_size = np.array((750, 750)) # window size
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
     _nparticles = 20 # number of particles
     _e = 1.0 # coefficient of restitution
-    _f = 0.3 # coefficient of friction
+    _f = 0 # coefficient of friction
     _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _particle_res_fric = False # If True enable friction and restitution on the particles
+    _wall_res_fric = False # If True enable friction and restitution on the walls
+    _drag = True # If True enable drag force
     rho_c = np.linspace(0.1, 1, 10) # density of the carrier fluid
     ke = []
     for rho in rho_c:
-        sim = sim_particles(_window_size, _nparticles, _e, _f, _random_particles)
-        sim.rho_c = rho
-        sim.particle_res_fric = False
+        sim = sim_particles(_window_size, _nparticles, _e, _f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
         for p in sim.particles:
-            p.wall_res_fric = False
-            p.drag = True
-        sim.simulate_non_fixed_dt(25)
+            p.rho_c = rho
+        sim.simulate(25, 500)
         ke.append(sim.kinetic_energy[-1])
     
     fig_save = os.path.join(fig_path, 'drag_ke_vs_rho_c.pdf')
@@ -723,21 +800,23 @@ def drag_ke_vs_rho_c(fig_path):
 
 def drag_ke_vs_Cd(fig_path):
     # Plot the kinetic energy of the particles vs the drag coefficient
-    _window_size = np.array((750, 750)) # window size
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm  ))
     _nparticles = 20 # number of particles
     _e = 1.0 # coefficient of restitution
     _f = 0.3 # coefficient of friction
     _random_particles = [False, False] # Bools for implemting random radius and/or random density
-    Cd = np.linspace(0.1, 1, 10) # drag coefficient
+    _particle_res_fric = False # If True enable friction and restitution on the particles
+    _wall_res_fric = False # If True enable friction and restitution on the walls
+    _drag = True # If True enable drag force
+    
+    Cd = np.linspace(0, 1, 25) # drag coefficient
     ke = []
     for cd in Cd:
-        sim = sim_particles(_window_size, _nparticles, _e, _f, _random_particles)
-        sim.Cd = cd
-        sim.particle_res_fric = False
+        print(f'Simulation {cd} of {Cd[-1]}')
+        sim = sim_particles(_window_size, _nparticles, _e, _f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
         for p in sim.particles:
-            p.wall_res_fric = False
-            p.drag = True
-        sim.simulate_non_fixed_dt(25)
+            p.C_D = cd
+        sim.simulate(25,2500)
         ke.append(sim.kinetic_energy[-1])
     
     fig_save = os.path.join(fig_path, 'drag_ke_vs_Cd.pdf')
@@ -746,67 +825,108 @@ def drag_ke_vs_Cd(fig_path):
     plt.xlabel('Drag coefficient, Cd (-)')
     plt.ylabel('Kinetic energy (J)')
     plt.grid()
+    plt.tight_layout()
     plt.savefig(fig_save)
 
-
-
-if __name__ == '__main__':
-    _window_size = np.array((750, 750)) # window size
-    _nparticles = 20 # number of particles
+def collisions_vs_number_of_particles(fig_path):
+    # Plot the number of collisions and mean free path vs the number of particles
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
+    _nparticles = np.arange(5, 55, 5) # number of particles
     _e = 1.0 # coefficient of restitution
     _f = 0.3 # coefficient of friction
     _random_particles = [False, False] # Bools for implemting random radius and/or random density
-    sim = sim_particles(_window_size, _nparticles, _e, _f, _random_particles)
+    _particle_res_fric = False # If True enable friction and restitution on the particles
+    _wall_res_fric = False # If True enable friction and restitution on the walls
+    _drag = False # If True enable drag force
+    collisions = []
+    mean_free_path = []
+    for nparticles in _nparticles:
+        print(f'Simulation {nparticles} of {_nparticles[-1]}')
+        sim = sim_particles(_window_size, nparticles, _e, _f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
+        sim.simulate_non_fixed_dt(25)
+        collisions.append(len(sim.t))
+        mean_free_path.append(np.mean(sim.mean_free_path))
+    fig_save = os.path.join(fig_path, 'collisions_vs_number_of_particles.pdf')
+    plt.figure()
+    plt.plot(_nparticles, collisions, 'o-')
+    plt.xlabel('Number of particles')
+    plt.ylabel('Number of collisions/number of steps used')
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(fig_save)
+
+    fig_save = os.path.join(fig_path, 'mean_free_path_vs_number_of_particles.pdf')
+    plt.figure()
+    plt.plot(_nparticles, mean_free_path, 'o-')
+    plt.xlabel('Number of particles')
+    plt.ylabel('Mean free path (m)')
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(fig_save)
+
+if __name__ == '__main__':
+    plt.rc('legend', fontsize=10) # legend fontsize
+    plt.rc('axes', labelsize=13)  # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=11)  # fontsize of the tick labels
+    plt.rc('ytick', labelsize=11)  # fontsize of the tick labels
+    fig_path = r'Jacob\Project2\figures' # path for saving figures
+
+    _window_size = np.array((0.75, 0.75)) # window size (Nb scaled to work with SI-units (1 pixel == 1 mm ))
+    _nparticles = 20 # number of particles
+    _e = 0.8 # coefficient of restitution
+    _f = 0.2 # coefficient of friction
+    _random_particles = [False, False] # Bools for implemting random radius and/or random density
+    _particle_res_fric = False # If True enable friction and restitution on the walls
+    _wall_res_fric = False # If True enable friction and restitution on the particles
+    _drag = False # If True enable drag force on the particles
+    sim = sim_particles(_window_size, _nparticles, _e, _f, _random_particles, _particle_res_fric, _wall_res_fric, _drag)
 
     if False:
     # if True:
-        # Simulating in timespand for getting statistics, plots etc.
+        # Simulating in a timespan for getting statistics, plots etc.
         st = time.perf_counter()
-        T = 20 # simulation time
-        N = 100 # number of time steps (used for fixed time steps in the simulation)
-        sim.simulate(T, N) # Simulating with fixed time steps
-        # sim.simulate_non_fixed_dt(T) # Simulating with non-fixed time steps
+        T = 25 # simulation time
+        N = 2500 # number of time steps (used for fixed time steps in the simulation)
+        # sim.simulate(T, N) # Simulating with fixed time steps
+        sim.simulate_non_fixed_dt(T) # Simulating with non-fixed time steps
         et = time.perf_counter()
         print(f'Time for simulation: {et - st:.2f} seconds')
         sim.plot_kinetic_energy()
-        sim.plot_mean_free_path()
-        sim.plot_velocity_distribution([0, N-1]) # The list is for selecting which time steps to plot
+        # sim.plot_mean_free_path()
+        # sim.plot_velocity_distribution([0, -1]) # The list is for selecting which time steps to plot
         plt.show()
         stop = True
 
-    elif True:
-        plt.rc('legend', fontsize=10) # legend fontsize
-        plt.rc('axes', labelsize=13)  # fontsize of the x and y labels
-        plt.rc('xtick', labelsize=11)
-        plt.rc('ytick', labelsize=11)
+    elif False:
+    # elif True:
         # Simulating for making plots
         # get path for saving figures
-        fig_path = r'Jacob\Project2\figures'
         # pp_ke_vs_f(fig_path)
         # pp_ke_vs_e(fig_path)
+        # pp_ke(fig_path)
         # pw_ke_vs_f(fig_path)
         # pw_ke_vs_e(fig_path)
-        sim_steps_vs_particles(fig_path)
+        # pw_ke(fig_path)
+        # sim_steps_vs_particles(fig_path)
+        # drag_ke_vs_Cd(fig_path)
+        # drag_ke_vs_rho_c(fig_path)
+        # collisions_vs_number_of_particles(fig_path)
         plt.show()
-
-
-    
 
     else:
         # Simulating using pyglet for visualization
-        window = pyglet.window.Window(sim.window_size[0], sim.window_size[1])
+        window = pyglet.window.Window(int(sim.window_size[0]*1000), int(sim.window_size[1]*1000))
         batch = pyglet.graphics.Batch()
-
+        
         @window.event
         def on_draw():
             window.clear()
             batch.draw()
         sim.init_time_before_collision_matrix() # Initialize the time before collision matrix
-        pyglet.clock.schedule_interval(sim.simulate_to_pyglet, 1/120.0) # fixed time step
-        # pyglet.clock.schedule_interval(sim.simulate_to_pyglet_non_fixed_dt, 1) # non-fixed time step NB! here 1 corrosponds to the amount of time each frame is displayed
+        pyglet.clock.schedule_interval(sim.simulate_to_pyglet, 1/120) # fixed time step
+        # pyglet.clock.schedule_interval(sim.simulate_to_pyglet_non_fixed_dt, 1.5) # non-fixed time step NB! here 1 corrosponds to the amount of time each frame is displayed
 
         sim.make_particles_pyglet(batch)
-        
         pyglet.app.run()
 
         del window
