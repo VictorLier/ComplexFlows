@@ -12,6 +12,8 @@ class imbibition_simulation():
         self.gamma = gamma
         self.H = H
         self.L = L
+        self.A_I = 2*self.gamma*np.cos(self.theta)/(self.rho_l*self.H)
+        self.B = 12*self.mu_l/(self.rho_l*self.H**2)
         self._save_path = r"Jacob\Project3\Python_figures"
 
     def Lucas_Washburn(self, t):
@@ -20,9 +22,7 @@ class imbibition_simulation():
     
     def Bosanquet(self, t):
         # Bosanquet equation
-        A = np.sqrt(2*self.gamma*np.cos(self.theta)/(self.rho_l*self.H))
-        B = 12*self.mu_l/(self.rho_l*self.H**2)
-        return np.sqrt(2*A**2/B*(t-1/B*(1-np.exp(-B*t))))
+        return np.sqrt(2*self.A_I**2/self.B*(t-1/self.B*(1-np.exp(-self.B*t))))
     
     def l_vs_t(self):
         data = r"Jacob\Project3\position_time_no_fillet.csv"
