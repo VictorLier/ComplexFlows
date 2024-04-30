@@ -27,7 +27,6 @@ def load_data(name: str, folder:str="Victor/Project3/cfd_results") -> np.ndarray
     data = np.loadtxt(file_name, skiprows=1, delimiter=",")
     return data[:, 0], data[:, 1]
 
-
 class Capillary():
     def __init__(self, H:float=0.001, L:float=0.01, theta:float=20, rho_l:float=997, rho_g:float=1, mu_l:float=8.88e-4, mu_g:float=17.9e-6, gamma:float=0.072) -> None:
         '''
@@ -337,7 +336,7 @@ class Capillary():
             plt.ylabel("Distance [m]")
             plt.legend()
 
-            latex_plot(self.t, self.lucas_washburn, "lucas_washburn_modified")
+            latex_plot(self.t, self.lucas_washburn_modified, "lucas_washburn_modified")
 
     def Bosanquet_modified(self, plot:bool=False) -> None:
         '''
@@ -378,13 +377,13 @@ class Capillary():
             latex_plot(self.t, self.bosanquet_modified, "bosanquet_modified")
 
 if __name__ == "__main__":
-    if True: # Question 1
+    if False: # Question 1
         cap = Capillary()
         plt.figure()
         cap.normal_noslip_velocityprofile(plot=True)
         plt.show()
 
-    if True: # Question 2
+    if False: # Question 2
         cap = Capillary()
         plt.figure()
         cap.normal_noslip_timehistory(plot=True)
@@ -392,7 +391,7 @@ if __name__ == "__main__":
         cap.Bosanquet(plot=True)
         plt.show()
 
-    if True: # Question 3
+    if False: # Question 3
         cap = Capillary()
         plt.figure()
         cap.normal_noslip_timehistory(plot=True)
@@ -401,7 +400,7 @@ if __name__ == "__main__":
         cap.fillet_noslip_timehistory(plot=True)
         plt.show()
 
-    if True: # Question 5
+    if False: # Question 5
         cap = Capillary()
         plt.figure()
         cap.fillet_noslip_closed_comp_timehistory(plot=True)
@@ -412,9 +411,7 @@ if __name__ == "__main__":
         cap.fillet_noslip_closed_uncomp_velocityprofile(plot=True)
         plt.show()
 
-
-
-    if True: # Question 6
+    if False: # Question 6
         plt.figure()
         cap = Capillary()
         cap.normal_noslip_timehistory(plot=True)
@@ -424,14 +421,14 @@ if __name__ == "__main__":
         cap.Lucas_washburn_modified(plot=True)
         plt.show()
 
-    if True: # Question 7
+    if False: # Question 7
         cap = Capillary()
         plt.figure()
         cap.waterwater_noslip_timehistory(plot=True)
         cap.waterwater_slip_timehistory(plot=True)
         plt.show()
 
-    if True: # Question 8
+    if False: # Question 8
         cap = Capillary()
         plt.figure()
         cap.waterwater_noslip_timehistory(plot=True)
