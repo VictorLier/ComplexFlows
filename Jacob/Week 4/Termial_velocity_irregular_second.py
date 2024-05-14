@@ -22,7 +22,7 @@ def find_vT(_vT):
     # Calculate Re_r
     Re_r = D_V * _vT / nu_c
     
-    f = D_PA / D_V * (1 + 0.15 / (np.sqrt(c) * (Re_r * D_PA / D_V)**0.687)) + 0.42*(D_PA/D_V)** 2* Re_r / (np.sqrt(c) * (1 + 4.25 * 10**4 * (Re_r * D_PA / D_V)**(-1.16)))
+    f = D_PA / D_V * (1 + 0.15 / (np.sqrt(c) * (Re_r * D_PA / D_V)**0.687)) + 0.0175*(D_PA/D_V)** 2 * Re_r / (np.sqrt(c) * (1 + 4.25 * 10**4 * (Re_r * D_PA / D_V)**(-1.16)))
     
     # Calculate vT
     vT = g*tau_v/f
